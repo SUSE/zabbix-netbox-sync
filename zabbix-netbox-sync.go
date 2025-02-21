@@ -35,6 +35,21 @@ var (
 	logger *slog.Logger
 )
 
+type zabbixMetric struct {
+	ID string
+	Key string
+	Name string
+	Value string
+	Error string
+}
+
+type zabbixHostData struct {
+	HostID string
+	HostName string
+	Metrics []zabbixMetric
+}
+
+
 func main() {
 	var logLevelStr string
 	var netboxUrl string
@@ -78,6 +93,8 @@ func main() {
 
 	Debug("%v", nbres.Results)
 
+	zabbixHosts := make(map[string]*zabbixHostData)
+
 	whitelistedHostgroups := []string{"Owners/Engineering/Infrastructure"}
 	hostGroupParams := zabbix.HostgroupGetParams{}
 	allHostGroups, err := z.GetHostgroups(hostGroupParams)
@@ -110,15 +127,22 @@ func main() {
 	hostInterfaces, err := z.GetHostInterfaces(interfaceParams)
 	handleError("Querying host interfaces", err)
 
-	/*
 	var workHostInterfaces []zabbix.HostInterface
 	for _, whi := range hostInterfaces {
 		if whi.Type == 1 {
 			workHostInterfaces = append(workHostInterfaces, whi)
+			hostname := whi.DNS
+			if hostname == "" {
+				Debug("Empty DNS field in interface %s", whi.InterfaceID)
+				hostname = whi.IP
+			}
+			zabbixHosts[whi.HostID] = &zabbixHostData{
+				HostID: whi.HostID,
+				HostName: hostname,
+			}
 		}
 	}
 	Debug("Filtered host interfaces: %v", workHostInterfaces)
-	*/
 
 	var workHostInterfaceIds []string
 	for _, whi := range hostInterfaces {
@@ -140,7 +164,6 @@ func main() {
 		"system.sw.arch",
 		"vm.memory.size[total]",
 	}
-
 	itemParams := zabbix.ItemGetParams{
 		//GetParameters: searchGetParameters,
 		GetParameters: zabbix.GetParameters{
@@ -155,8 +178,28 @@ func main() {
 	Debug("Items: %v", items)
 
 	for _, item := range items {
+		hostId := item.HostID
+		host, hostPresent := zabbixHosts[hostId]
+		if !hostPresent {
+			continue
+		}
+		host.Metrics = append(host.Metrics, zabbixMetric{
+			ID: item.ItemID,
+			Key: item.ItemKey,
+			Name: item.ItemName,
+			Value: item.LastValue,
+			Error: item.Error,
+		})
 		if item.Error != "" {
-			Info("Host %s Item %s %s LastValue %s LastValueType %d Error %s", item.HostID, item.ItemID, item.ItemName, item.LastValue, item.LastValueType, item.Error)
+			Error("HostID=%s ItemID=%s ItemName=%s LastValue=%s LastValueType=%d Error=%s", item.HostID, item.ItemID, item.ItemName, item.LastValue, item.LastValueType, item.Error)
 		}
 	}
+
+	for _, host := range zabbixHosts {
+		Info("Got host %s", host.HostName)
+		for _, metric := range host.Metrics {
+			Info("Got metric %s => %s", metric.Key, metric.Value)
+		}
+	}
+
 }
