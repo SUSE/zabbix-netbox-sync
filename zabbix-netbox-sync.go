@@ -21,34 +21,15 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/netbox-community/go-netbox/v4"
-
-	// github.com/zabbix-tools/go-zabbix is not compatible with v6
-	"github.com/fabiang/go-zabbix"
 )
 
 var (
 	logger *slog.Logger
 )
-
-type zabbixMetric struct {
-	ID string
-	Key string
-	Name string
-	Value string
-	Error string
-}
-
-type zabbixHostData struct {
-	HostID string
-	HostName string
-	Metrics []zabbixMetric
-}
-
 
 func main() {
 	var logLevelStr string
@@ -78,11 +59,7 @@ func main() {
 		zabbixUser = "guest"
 	}
 
-	zabbixUrl = fmt.Sprintf("%s/api_jsonrpc.php", zabbixUrl)
-
-	Debug("Connecting to Zabbix at %s", zabbixUrl)
-	z, err := zabbix.NewSession(zabbixUrl, zabbixUser, zabbixPassphrase)
-	handleError("Connection to Zabbix", err)
+	z := zConnect(zabbixUrl, zabbixUser, zabbixPassphrase)
 
 	Debug("Connecting to NetBox at %s", netboxUrl)
 	nbctx := context.Background()
@@ -93,62 +70,11 @@ func main() {
 
 	Debug("%v", nbres.Results)
 
-	zabbixHosts := make(map[string]*zabbixHostData)
+	zabbixHosts := make(zabbixHosts)
 
 	whitelistedHostgroups := []string{"Owners/Engineering/Infrastructure"}
-	hostGroupParams := zabbix.HostgroupGetParams{}
-	allHostGroups, err := z.GetHostgroups(hostGroupParams)
-	handleError("Querying host groups", err)
-	Debug("All host groups: %v", allHostGroups)
-
-	workHostGroupIds := make([]string, 0, len(whitelistedHostgroups))
-	for _, ahg := range allHostGroups {
-		if contains(whitelistedHostgroups, ahg.Name) {
-			workHostGroupIds = append(workHostGroupIds, ahg.GroupID)
-		}
-	}
-	Debug("Filtered host group IDs: %v", workHostGroupIds)
-
-	hostParams := zabbix.HostGetParams{
-		GroupIDs: workHostGroupIds,
-	}
-	workHosts, err := z.GetHosts(hostParams)
-	handleError("Querying hosts", err)
-
-	workHostIds := make([]string, 0, len(workHosts))
-	for _, wh := range workHosts {
-		workHostIds = append(workHostIds, wh.HostID)
-	}
-	Debug("Filtered host IDs: %v", workHostIds)
-
-	interfaceParams := zabbix.HostInterfaceGetParams{
-		HostIDs: workHostIds,
-	}
-	hostInterfaces, err := z.GetHostInterfaces(interfaceParams)
-	handleError("Querying host interfaces", err)
-
-	var workHostInterfaces []zabbix.HostInterface
-	for _, whi := range hostInterfaces {
-		if whi.Type == 1 {
-			workHostInterfaces = append(workHostInterfaces, whi)
-			hostname := whi.DNS
-			if hostname == "" {
-				Debug("Empty DNS field in interface %s", whi.InterfaceID)
-				hostname = whi.IP
-			}
-			zabbixHosts[whi.HostID] = &zabbixHostData{
-				HostID: whi.HostID,
-				HostName: hostname,
-			}
-		}
-	}
-	Debug("Filtered host interfaces: %v", workHostInterfaces)
-
-	var workHostInterfaceIds []string
-	for _, whi := range hostInterfaces {
-		workHostInterfaceIds = append(workHostInterfaceIds, whi.InterfaceID)
-	}
-	Debug("Filtered host interface IDs: %v", workHostInterfaceIds)
+	workHosts := getHosts(z, filterHostGroupIds(getHostGroups(z), whitelistedHostgroups))
+	workHostInterfaceIds := filterHostInterfaceIds(filterHostInterfaces(&zabbixHosts, getHostInterfaces(z, filterHostIds(workHosts))))
 
 	search := make(map[string][]string)
 	search["_key"] = []string{
@@ -164,42 +90,25 @@ func main() {
 		"system.sw.arch",
 		"vm.memory.size[total]",
 	}
-	itemParams := zabbix.ItemGetParams{
-		//GetParameters: searchGetParameters,
-		GetParameters: zabbix.GetParameters{
-			SearchByAny:               true,
-			EnableTextSearchWildcards: true,
-			TextSearch:                search,
-		},
-		InterfaceIDs: workHostInterfaceIds,
-	}
-	items, err := z.GetItems(itemParams)
-	handleError("Querying items", err)
-	Debug("Items: %v", items)
 
-	for _, item := range items {
-		hostId := item.HostID
-		host, hostPresent := zabbixHosts[hostId]
-		if !hostPresent {
-			continue
-		}
-		host.Metrics = append(host.Metrics, zabbixMetric{
-			ID: item.ItemID,
-			Key: item.ItemKey,
-			Name: item.ItemName,
-			Value: item.LastValue,
-			Error: item.Error,
-		})
-		if item.Error != "" {
-			Error("HostID=%s ItemID=%s ItemName=%s LastValue=%s LastValueType=%d Error=%s", item.HostID, item.ItemID, item.ItemName, item.LastValue, item.LastValueType, item.Error)
-		}
-	}
+	filterItems(&zabbixHosts, getItems(z, workHostInterfaceIds, search))
 
 	for _, host := range zabbixHosts {
-		Info("Got host %s", host.HostName)
+		Debug("Got host %s", host.HostName)
+
+		found := false
 		for _, metric := range host.Metrics {
-			Info("Got metric %s => %s", metric.Key, metric.Value)
+			Info(metric.Key)
+			if metric.Key == "agent.hostname" {
+				Info("Got %s => %s", metric.Key, metric.Value)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			Error("Skipping export of %s (%s), 'agent.hostname' is missing.", host.HostID, host.HostName)
+			continue
 		}
 	}
-
 }
