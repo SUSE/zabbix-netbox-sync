@@ -39,16 +39,20 @@ func convertLogLevel(levelStr string) slog.Level {
 	}
 }
 
-func Error(format string, args ...any) {
-	logger.Error(fmt.Sprintf(format, args...))
-}
-
 func Debug(format string, args ...any) {
 	logger.Debug(fmt.Sprintf(format, args...))
 }
 
 func Info(format string, args ...any) {
 	logger.Info(fmt.Sprintf(format, args...))
+}
+
+func Warn(format string, args ...any) {
+	logger.Warn(fmt.Sprintf(format, args...))
+}
+
+func Error(format string, args ...any) {
+	logger.Error(fmt.Sprintf(format, args...))
 }
 
 func handleError(action string, err error) {
