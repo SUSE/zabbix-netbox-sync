@@ -41,6 +41,7 @@ type zabbixHostData struct {
 	Error    bool
 	ObjType  string
 	Meta     zabbixHostMetaData
+	Label    string
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -198,6 +199,22 @@ func parseHostMetadata(raw string) (zabbixHostMetaData, bool, error) {
 	return metadata, ok, nil
 }
 
+func scanHostMetadata(host *zabbixHostData) {
+	for k, v := range host.Meta {
+		if k == "label" {
+			host.Label = v
+			Debug("setHostLabel() set label of host %s (%s) to %s", host.HostID, host.HostName, host.Label)
+
+			return
+		}
+	}
+
+	// instead of duplicating HostName into Label, maybe better check if Label is empty while processing the host and then fall back to HostName there?
+	host.Label = host.HostName
+
+	return
+}
+
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
 	have_sys_hw_manufacturer := false
@@ -233,6 +250,8 @@ func scanHost(host *zabbixHostData) bool {
 				if !ok {
 					Warn("Host %s (%s) serves empty metadata", host.HostID, host.HostName)
 				}
+
+				scanHostMetadata(host)
 
 				continue
 			}
