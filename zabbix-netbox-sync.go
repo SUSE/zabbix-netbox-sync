@@ -19,12 +19,9 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log/slog"
 	"os"
-
-	"github.com/netbox-community/go-netbox/v4"
 )
 
 var (
@@ -61,14 +58,9 @@ func main() {
 
 	z := zConnect(zabbixUrl, zabbixUser, zabbixPassphrase)
 
-	Debug("Connecting to NetBox at %s", netboxUrl)
-	nbctx := context.Background()
-	nb := netbox.NewAPIClientFor(netboxUrl, netboxToken)
+	nb, nbctx := nbConnect(netboxUrl, netboxToken)
 
-	nbres, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(nbctx).Status([]string{"active"}).Limit(10).Execute()
-	handleError("Querying virtual machines", err)
-
-	Debug("%v", nbres.Results)
+	getVirtualMachines(nb, nbctx)
 
 	zabbixHosts := make(zabbixHosts)
 
