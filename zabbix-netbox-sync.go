@@ -96,6 +96,11 @@ func main() {
 	for _, host := range zabbixHosts {
 		Debug("Got host %s", host.HostName)
 
+		if host.Error {
+			Error("Skipping export of %s (%s), metrics contain errors.")
+			continue
+		}
+
 		found := false
 		for _, metric := range host.Metrics {
 			Info(metric.Key)

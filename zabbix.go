@@ -35,6 +35,7 @@ type zabbixHostData struct {
 	HostID   string
 	HostName string
 	Metrics  []zabbixMetric
+	Error    bool
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -169,6 +170,7 @@ func filterItems(zh *zabbixHosts, items []zabbix.Item) {
 		})
 
 		if item.Error != "" {
+			host.Error = true
 			Error("HostID=%s ItemID=%s ItemName=%s LastValue=%s LastValueType=%d Error=%s", item.HostID, item.ItemID, item.ItemName, item.LastValue, item.LastValueType, item.Error)
 		}
 	}
