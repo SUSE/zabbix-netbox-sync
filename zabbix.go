@@ -223,13 +223,12 @@ func scanHost(host *zabbixHostData) bool {
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
 
-		if metric.Key == "agent.hostname" {
+		switch metric.Key {
+
+		case "agent.hostname":
 			have_agent_hostname = true
 
-			continue
-		}
-
-		if metric.Key == "sys.hw.manufacturer" {
+		case "sys.hw.manufacturer":
 			have_sys_hw_manufacturer = true
 
 			if metric.Value == "QEMU" {
@@ -237,10 +236,7 @@ func scanHost(host *zabbixHostData) bool {
 				// TODO: map virtualization cluster
 			}
 
-			continue
-		}
-
-		if metric.Key == "sys.hw.metadata" {
+		case "sys.hw.metadata":
 			have_sys_hw_metadata = true
 
 			metadata, ok, err := parseHostMetadata(metric.Value)
@@ -253,13 +249,11 @@ func scanHost(host *zabbixHostData) bool {
 
 				scanHostMetadata(host)
 
-				continue
+				break
 			}
 
 			Error("Host %s (%s) serves invalid metadata: %s", host.HostID, host.HostName, err)
 			host.Error = true
-
-			continue
 		}
 
 		if have_agent_hostname && have_sys_hw_manufacturer && have_sys_hw_metadata {
