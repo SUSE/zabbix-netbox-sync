@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"github.com/fabiang/go-zabbix"
+	"gopkg.in/yaml.v3"
 )
 
 type zabbixMetric struct {
@@ -31,12 +32,15 @@ type zabbixMetric struct {
 	Error string
 }
 
+type zabbixHostMetaData map[string]string
+
 type zabbixHostData struct {
 	HostID   string
 	HostName string
 	Metrics  []zabbixMetric
 	Error    bool
 	ObjType  string
+	Meta     zabbixHostMetaData
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -177,9 +181,27 @@ func filterItems(zh *zabbixHosts, items []zabbix.Item) {
 	}
 }
 
+func parseHostMetadata(raw string) (zabbixHostMetaData, bool, error) {
+	ok := false
+	metadata := make(zabbixHostMetaData)
+
+	err := yaml.Unmarshal([]byte(raw), &metadata)
+	Debug("parseHostMetadata() unmarshalled %v", metadata)
+	if err != nil {
+		return nil, ok, err
+	}
+
+	if len(metadata) > 0 {
+		ok = true
+	}
+
+	return metadata, ok, nil
+}
+
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
 	have_sys_hw_manufacturer := false
+	have_sys_hw_metadata := false
 
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
@@ -201,7 +223,27 @@ func scanHost(host *zabbixHostData) bool {
 			continue
 		}
 
-		if have_agent_hostname && have_sys_hw_manufacturer {
+		if metric.Key == "sys.hw.metadata" {
+			have_sys_hw_metadata = true
+
+			metadata, ok, err := parseHostMetadata(metric.Value)
+			if err == nil {
+				host.Meta = metadata
+
+				if !ok {
+					Warn("Host %s (%s) serves empty metadata", host.HostID, host.HostName)
+				}
+
+				continue
+			}
+
+			Error("Host %s (%s) serves invalid metadata: %s", host.HostID, host.HostName, err)
+			host.Error = true
+
+			continue
+		}
+
+		if have_agent_hostname && have_sys_hw_manufacturer && have_sys_hw_metadata {
 			break
 		}
 	}
@@ -212,6 +254,10 @@ func scanHost(host *zabbixHostData) bool {
 
 	if !have_sys_hw_manufacturer {
 		Error("Host %s (%s) is missing the 'sys.hw.manufacturer' item.", host.HostID, host.HostName)
+	}
+
+	if !have_sys_hw_metadata {
+		Warn("Host %s (%s) is missing the 'sys.hw.metadata' item.", host.HostID, host.HostName)
 	}
 
 	if !have_agent_hostname || !have_sys_hw_manufacturer {
