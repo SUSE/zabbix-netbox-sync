@@ -281,3 +281,17 @@ func scanHost(host *zabbixHostData) bool {
 
 	return true
 }
+
+func scanHosts(zh *zabbixHosts) {
+	for _, host := range *zh {
+		Debug("Got host %s", host.HostName)
+
+		ok := scanHost(host)
+
+		if !ok {
+			Warn("Skipping export of host %s (%s) due to errors.", host.HostID, host.HostName)
+
+			continue
+		}
+	}
+}

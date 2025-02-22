@@ -85,16 +85,6 @@ func main() {
 	}
 
 	filterItems(&zabbixHosts, getItems(z, workHostInterfaceIds, search))
+	scanHosts(&zabbixHosts)
 
-	for _, host := range zabbixHosts {
-		Debug("Got host %s", host.HostName)
-
-		ok := scanHost(host)
-
-		if !ok {
-			Warn("Skipping export of host %s (%s) due to errors.", host.HostID, host.HostName)
-
-			continue
-		}
-	}
 }
