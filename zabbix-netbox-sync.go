@@ -61,6 +61,7 @@ func main() {
 	nb, nbctx := nbConnect(netboxUrl, netboxToken)
 
 	getVirtualMachines(nb, nbctx)
+	getDevices(nb, nbctx)
 
 	zabbixHosts := make(zabbixHosts)
 

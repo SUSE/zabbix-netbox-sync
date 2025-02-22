@@ -35,3 +35,12 @@ func getVirtualMachines(nb *netbox.APIClient, ctx context.Context) *netbox.Pagin
 
 	return result
 }
+
+func getDevices(nb *netbox.APIClient, ctx context.Context) *netbox.PaginatedDeviceWithConfigContextList {
+	result, _, err := nb.DcimAPI.DcimDevicesList(ctx).Execute()
+	handleError("Querying devices", err)
+
+	Debug("getDevices() returns %v", result.Results)
+
+	return result
+}
