@@ -28,7 +28,7 @@ func nbConnect(url string, token string) (*netbox.APIClient, context.Context) {
 }
 
 func getVirtualMachines(nb *netbox.APIClient, ctx context.Context) *netbox.PaginatedVirtualMachineWithConfigContextList {
-	result, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Status([]string{"active"}).Execute()
+	result, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Execute()
 	handleError("Querying virtual machines", err)
 
 	Debug("getVirtualMachines() returns %v", result.Results)
