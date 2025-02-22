@@ -88,23 +88,11 @@ func main() {
 	for _, host := range zabbixHosts {
 		Debug("Got host %s", host.HostName)
 
-		if host.Error {
-			Error("Skipping export of %s (%s), metrics contain errors.")
-			continue
-		}
+		ok := scanHost(host)
 
-		found := false
-		for _, metric := range host.Metrics {
-			Info(metric.Key)
-			if metric.Key == "agent.hostname" {
-				Info("Got %s => %s", metric.Key, metric.Value)
-				found = true
-				break
-			}
-		}
+		if !ok {
+			Warn("Skipping export of host %s (%s) due to errors.", host.HostID, host.HostName)
 
-		if !found {
-			Error("Skipping export of %s (%s), 'agent.hostname' is missing.", host.HostID, host.HostName)
 			continue
 		}
 	}

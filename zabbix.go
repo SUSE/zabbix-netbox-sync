@@ -36,6 +36,7 @@ type zabbixHostData struct {
 	HostName string
 	Metrics  []zabbixMetric
 	Error    bool
+	ObjType  string
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -171,7 +172,53 @@ func filterItems(zh *zabbixHosts, items []zabbix.Item) {
 
 		if item.Error != "" {
 			host.Error = true
-			Error("HostID=%s ItemID=%s ItemName=%s LastValue=%s LastValueType=%d Error=%s", item.HostID, item.ItemID, item.ItemName, item.LastValue, item.LastValueType, item.Error)
+			Error("Item %s (%s) in host %s contains error: %s", item.ItemID, item.ItemName, item.HostID, item.Error)
 		}
 	}
+}
+
+func scanHost(host *zabbixHostData) bool {
+	have_agent_hostname := false
+	have_sys_hw_manufacturer := false
+
+	for _, metric := range host.Metrics {
+		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
+
+		if metric.Key == "agent.hostname" {
+			have_agent_hostname = true
+
+			continue
+		}
+
+		if metric.Key == "sys.hw.manufacturer" {
+			if metric.Value == "QEMU" {
+				have_sys_hw_manufacturer = true
+
+				host.ObjType = "Virtual"
+				// TODO: map virtualization cluster
+			}
+
+			continue
+		}
+
+		if have_agent_hostname && have_sys_hw_manufacturer {
+			break
+		}
+	}
+
+	if !have_agent_hostname {
+		Error("Host %s (%s) is missing the 'agent.hostname' item.", host.HostID, host.HostName)
+	}
+
+	if !have_sys_hw_manufacturer {
+		Error("Host %s (%s) is missing the 'sys.hw.manufacturer' item.", host.HostID, host.HostName)
+	}
+
+	if !have_agent_hostname || !have_sys_hw_manufacturer {
+		host.Error = true
+
+		return false
+	}
+
+	return true
 }
