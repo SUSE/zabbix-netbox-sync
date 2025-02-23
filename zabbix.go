@@ -201,7 +201,7 @@ func scanHostMetadata(host *zabbixHostData) {
 	for k, v := range host.Meta {
 		if k == "label" {
 			host.Label = v
-			Debug("setHostLabel() set label of host %s (%s) to %s", host.HostID, host.HostName, host.Label)
+			Debug("scanHostMetadata() set label of host %s (%s) to %s", host.HostID, host.HostName, host.Label)
 
 			return
 		}
