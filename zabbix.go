@@ -181,7 +181,7 @@ func filterItems(zh *zabbixHosts, items []zabbix.Item) {
 
 		if item.Error != "" {
 			host.Error = true
-			Error("Item %s (%s) in host %s contains error: %s", item.ItemID, item.ItemName, item.HostID, item.Error)
+			Error("Item %s (%s) in host %s contains error: '%s'", item.ItemID, item.ItemName, item.HostID, item.Error)
 		}
 	}
 }
@@ -293,7 +293,7 @@ func scanHosts(zh *zabbixHosts) {
 		ok := scanHost(host)
 
 		if !ok {
-			Warn("Skipping export of host %s (%s) due to errors.", host.HostID, host.HostName)
+			Debug("Scan of host %s (%s) returned errors.", host.HostID, host.HostName)
 
 			continue
 		}
