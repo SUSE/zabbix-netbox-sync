@@ -134,25 +134,14 @@ func filterHostInterfaces(zh *zabbixHosts, interfaces []zabbix.HostInterface) []
 	return hostInterfaces
 }
 
-func filterHostInterfaceIds(interfaces []zabbix.HostInterface) []string {
-	var interfaceIds []string
-	for _, iface := range interfaces {
-		interfaceIds = append(interfaceIds, iface.InterfaceID)
-	}
-
-	Debug("Filtered host interface IDs: %v", interfaceIds)
-
-	return interfaceIds
-}
-
-func getItems(z *zabbix.Session, interfaceIds []string, search map[string][]string) []zabbix.Item {
+func getItems(z *zabbix.Session, hostIds []string, search map[string][]string) []zabbix.Item {
 	items, err := z.GetItems(zabbix.ItemGetParams{
 		GetParameters: zabbix.GetParameters{
 			SearchByAny:               true,
 			EnableTextSearchWildcards: true,
 			TextSearch:                search,
 		},
-		InterfaceIDs: interfaceIds,
+		HostIDs: hostIds,
 	})
 	handleError("Querying items", err)
 

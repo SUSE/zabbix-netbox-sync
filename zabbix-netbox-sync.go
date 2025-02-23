@@ -67,7 +67,8 @@ func main() {
 
 	whitelistedHostgroups := []string{"Owners/Engineering/Infrastructure"}
 	workHosts := getHosts(z, filterHostGroupIds(getHostGroups(z), whitelistedHostgroups))
-	workHostInterfaceIds := filterHostInterfaceIds(filterHostInterfaces(&zabbixHosts, getHostInterfaces(z, filterHostIds(workHosts))))
+	hostIds := filterHostIds(workHosts)
+	filterHostInterfaces(&zabbixHosts, getHostInterfaces(z, hostIds))
 
 	search := make(map[string][]string)
 	search["key_"] = []string{
@@ -84,7 +85,7 @@ func main() {
 		"vm.memory.size[total]",
 	}
 
-	filterItems(&zabbixHosts, getItems(z, workHostInterfaceIds, search), search["_key"])
+	filterItems(&zabbixHosts, getItems(z, hostIds, search), search["key_"])
 	scanHosts(&zabbixHosts)
 
 }
