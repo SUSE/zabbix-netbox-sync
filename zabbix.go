@@ -161,8 +161,13 @@ func getItems(z *zabbix.Session, interfaceIds []string, search map[string][]stri
 	return items
 }
 
-func filterItems(zh *zabbixHosts, items []zabbix.Item) {
+func filterItems(zh *zabbixHosts, items []zabbix.Item, keys []string) {
 	for _, item := range items {
+		if !contains(keys, item.ItemKey) {
+			Debug("Discarding item with key %s", item.ItemKey)
+
+			continue
+		}
 		hostId := item.HostID
 
 		host, hostPresent := (*zh)[hostId]

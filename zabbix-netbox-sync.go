@@ -84,7 +84,7 @@ func main() {
 		"vm.memory.size[total]",
 	}
 
-	filterItems(&zabbixHosts, getItems(z, workHostInterfaceIds, search))
+	filterItems(&zabbixHosts, getItems(z, workHostInterfaceIds, search), search["_key"])
 	scanHosts(&zabbixHosts)
 
 }
