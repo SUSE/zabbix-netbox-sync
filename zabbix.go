@@ -124,7 +124,7 @@ func filterHostInterfaces(zh *zabbixHosts, interfaces []zabbix.HostInterface) []
 			(*zh)[iface.HostID] = &zabbixHostData{
 				HostID:   iface.HostID,
 				HostName: hostname,
-				Error: error,
+				Error:    error,
 			}
 		}
 	}
