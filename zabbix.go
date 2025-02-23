@@ -288,7 +288,13 @@ func scanHost(host *zabbixHostData) bool {
 
 func scanHosts(zh *zabbixHosts) {
 	for _, host := range *zh {
-		Debug("Got host %s", host.HostName)
+		if host.Error {
+			Debug("Skipping preprocessing of host %s.", host.HostName)
+
+			continue
+		}
+
+		Debug("Preprocessing host %s", host.HostName)
 
 		ok := scanHost(host)
 
