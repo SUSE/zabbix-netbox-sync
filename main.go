@@ -32,21 +32,42 @@ func main() {
 	var logLevelStr string
 	var netboxUrl string
 	var zabbixUrl string
-	var netboxToken string
-	var zabbixUser string
-	var zabbixPassphrase string
+	var runDry bool
+	var runWet bool
 
 	flag.StringVar(&logLevelStr, "loglevel", "info", "Logging level")
 	flag.StringVar(&netboxUrl, "netbox", "", "URL to a NetBox instance")
 	flag.StringVar(&zabbixUrl, "zabbix", "", "URL to a Zabbix instance")
+	flag.BoolVar(&runDry, "dry", false, "Run without performing any changes")
+	flag.BoolVar(&runWet, "wet", false, "Run and perform changes")
 	flag.Parse()
 
 	logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: convertLogLevel(logLevelStr)}))
 
+	problem := false
+
 	if zabbixUrl == "" || netboxUrl == "" {
 		Error("Specify -netbox <URL> and -zabbix <URL>.")
+		problem = true
+	}
+
+	if runDry && runWet {
+		Error("Specify -dry OR -wet, not both.")
+		problem = true
+	}
+
+	if !runDry && !runWet {
+		Error("Specify -dry OR -wet.")
+		problem = true
+	}
+
+	if problem {
 		os.Exit(1)
 	}
+
+	var netboxToken string
+	var zabbixUser string
+	var zabbixPassphrase string
 
 	netboxToken = os.Getenv("NETBOX_TOKEN")
 	zabbixUser = os.Getenv("ZABBIX_USER")
@@ -61,5 +82,5 @@ func main() {
 
 	zh := make(zabbixHosts)
 	prepare(z, &zh)
-	sync(&zh, nb, nbctx)
+	sync(&zh, nb, nbctx, runDry)
 }

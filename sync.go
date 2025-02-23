@@ -49,7 +49,7 @@ func prepare(z *zabbix.Session, zh *zabbixHosts) {
 	scanHosts(zh)
 }
 
-func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context) {
+func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	for _, host := range *zh {
 		if host.Error {
 			Warn("Skipping processing of host %s.", host.HostName)
@@ -82,7 +82,9 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context) {
 		}
 
 		if foundcount == 0 {
-			Info("Need to create object")
+			if dryRun {
+				Info("Would create object")
+			}
 		} else if foundcount == 1 {
 			Info("Found object")
 		} else {
