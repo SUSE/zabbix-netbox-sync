@@ -114,13 +114,17 @@ func filterHostInterfaces(zh *zabbixHosts, interfaces []zabbix.HostInterface) []
 		if iface.Type == 1 {
 			hostInterfaces = append(hostInterfaces, iface)
 			hostname := iface.DNS
+			error := false
 			if hostname == "" {
-				Debug("Empty DNS field in interface %s", iface.InterfaceID)
+				Error("Empty DNS field in interface %s on host %s (%s)", iface.InterfaceID, iface.HostID, iface.IP)
 				hostname = iface.IP
+				error = true
+
 			}
 			(*zh)[iface.HostID] = &zabbixHostData{
 				HostID:   iface.HostID,
 				HostName: hostname,
+				Error: error,
 			}
 		}
 	}
