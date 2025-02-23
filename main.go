@@ -57,35 +57,9 @@ func main() {
 	}
 
 	z := zConnect(zabbixUrl, zabbixUser, zabbixPassphrase)
-
 	nb, nbctx := nbConnect(netboxUrl, netboxToken)
 
-	getVirtualMachines(nb, nbctx)
-	getDevices(nb, nbctx)
-
-	zabbixHosts := make(zabbixHosts)
-
-	whitelistedHostgroups := []string{"Owners/Engineering/Infrastructure"}
-	workHosts := getHosts(z, filterHostGroupIds(getHostGroups(z), whitelistedHostgroups))
-	hostIds := filterHostIds(workHosts)
-	filterHostInterfaces(&zabbixHosts, getHostInterfaces(z, hostIds))
-
-	search := make(map[string][]string)
-	search["key_"] = []string{
-		"agent.hostname",
-		"net.if.ip4[*]",
-		"net.if.ip6[*]",
-		"sys.hw.manufacturer",
-		"sys.hw.metadata",
-		"sys.mount.nfs",
-		"sys.net.listen",
-		"sys.os.release",
-		"system.cpu.num",
-		"system.sw.arch",
-		"vm.memory.size[total]",
-	}
-
-	filterItems(&zabbixHosts, getItems(z, hostIds, search), search["key_"])
-	scanHosts(&zabbixHosts)
-
+	zh := make(zabbixHosts)
+	prepare(z, &zh)
+	sync(&zh, nb, nbctx)
 }
