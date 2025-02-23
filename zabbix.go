@@ -232,6 +232,10 @@ func scanHost(host *zabbixHostData) bool {
 			if metric.Value == "QEMU" {
 				host.ObjType = "Virtual"
 				// TODO: map virtualization cluster
+			} else {
+				// assuming all non-QEMU values to be physical is not ideal
+				// is there a better item than sys.hw.manufacturer for this ?
+				host.ObjType = "Physical"
 			}
 
 		case "sys.hw.metadata":

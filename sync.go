@@ -57,20 +57,36 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context) {
 			continue
 		}
 
-		Info("Processing host %s", host.HostName)
+		name := host.HostName
 
-		nbvms, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{host.HostName}).Limit(2).Execute()
-		handleError("Failed to query virtual machines: %s", err)
-		vms := nbvms.Results
-		Info("%v", vms)
-		vmcount := len(vms)
+		Info("Processing host %s", name)
 
-		if vmcount == 0 {
-			Info("Need to create VM")
-		} else if vmcount == 1 {
-			Info("Found VM")
+		nbname := []string{name}
+		var foundcount int
+
+		switch host.ObjType {
+
+		case "Virtual":
+			query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name(nbname).Limit(2).Execute()
+			handleError("Failed to query virtual machines: %s", err)
+			found := query.Results
+			Info("Found virtual machines: %v", found)
+			foundcount = len(found)
+
+		case "Physical":
+			query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name(nbname).Limit(2).Execute()
+			handleError("Failed to query devices: %s", err)
+			found := query.Results
+			Info("Found devices: %v", found)
+			foundcount = len(found)
+		}
+
+		if foundcount == 0 {
+			Info("Need to create object")
+		} else if foundcount == 1 {
+			Info("Found object")
 		} else {
-			Error("Host %s matches multiple virtual machine objects in NetBox.")
+			Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
 		}
 	}
 }
