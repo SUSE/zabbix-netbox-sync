@@ -70,7 +70,7 @@ func main() {
 	workHostInterfaceIds := filterHostInterfaceIds(filterHostInterfaces(&zabbixHosts, getHostInterfaces(z, filterHostIds(workHosts))))
 
 	search := make(map[string][]string)
-	search["_key"] = []string{
+	search["key_"] = []string{
 		"agent.hostname",
 		"net.if.ip4[*]",
 		"net.if.ip6[*]",
