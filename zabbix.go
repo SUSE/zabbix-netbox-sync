@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/fabiang/go-zabbix"
 	"gopkg.in/yaml.v3"
+	"strings"
 )
 
 type zabbixMetric struct {
@@ -33,15 +34,17 @@ type zabbixMetric struct {
 }
 
 type zabbixHostMetaData map[string]string
+type hostInterfaces map[string][]string
 
 type zabbixHostData struct {
-	HostID   string
-	HostName string
-	Metrics  []zabbixMetric
-	Error    bool
-	ObjType  string
-	Meta     zabbixHostMetaData
-	Label    string
+	HostID     string
+	HostName   string
+	Metrics    []zabbixMetric
+	Error      bool
+	ObjType    string
+	Meta       zabbixHostMetaData
+	Label      string
+	Interfaces hostInterfaces
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -213,15 +216,54 @@ func scanHostMetadata(host *zabbixHostData) {
 	return
 }
 
+func detectInterfaceMetric(name string) bool {
+	return strings.HasPrefix(name, "net.if.")
+}
+
+func parseInterfaceMetric(zm zabbixMetric) (string, string, []string) {
+	// dissect net.if.ip4[\"eth2\"] without regex
+	mkeysplit := strings.SplitN(strings.Replace(zm.Key, "]", "", 1), "[", 2)
+	Debug("parseInterfaceMetric() split to %+v", mkeysplit)
+	family := strings.SplitN(mkeysplit[0], ".", 3)[2]
+	name := strings.Replace(strings.Replace(mkeysplit[1], "\"", "", 2), "\"", "", 2)
+	Debug("parseInterfaceMetric() set family \"%s\" name \"%s\"", family, name)
+	addresses := strings.Split(zm.Value, "\n")
+
+	return name, family, addresses
+}
+
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
 	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
 
+	// maybe this would be prettier in a constructor function called in filterHostInterfaces()
+	host.Interfaces = make(hostInterfaces)
+
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
 
-		switch metric.Key {
+		mkey := metric.Key
+
+		if detectInterfaceMetric(mkey) {
+			name, _, addresses := parseInterfaceMetric(metric)
+			if len(addresses) == 0 {
+				Debug("scanHost() ignoring host %s interface %s due to nil address", host.HostName, name)
+			} else {
+				_, exists := host.Interfaces[name]
+				if exists {
+					host.Interfaces[name] = append(host.Interfaces[name], addresses...)
+				} else {
+					host.Interfaces[name] = addresses
+				}
+
+				Debug("scanHost() updated host %s interfaces %+v", host.HostName, host.Interfaces[name])
+			}
+
+			continue
+		}
+
+		switch mkey {
 
 		case "agent.hostname":
 			have_agent_hostname = true
