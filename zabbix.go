@@ -152,11 +152,11 @@ func getItems(z *zabbix.Session, hostIds []string, search map[string][]string) [
 
 func filterItems(zh *zabbixHosts, items []zabbix.Item, keys []string) {
 	for _, item := range items {
-		if !contains(keys, item.ItemKey) {
-			Debug("Discarding item with key %s", item.ItemKey)
+		//if !contains(keys, item.ItemKey) {
+		//	Debug("Discarding item with key %s", item.ItemKey)
 
-			continue
-		}
+		//	continue
+		//}
 		hostId := item.HostID
 
 		host, hostPresent := (*zh)[hostId]
