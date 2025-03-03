@@ -20,8 +20,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/fabiang/go-zabbix"
 	"github.com/netbox-community/go-netbox/v4"
+	"os"
 )
 
 func prepare(z *zabbix.Session, zh *zabbixHosts) {
@@ -68,27 +70,68 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 
 		case "Virtual":
 			query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name(nbname).Limit(2).Execute()
-			handleError("Failed to query virtual machines: %s", err)
+			handleError("Query of virtual machines", err)
 			found := query.Results
 			Info("Found virtual machines: %v", found)
-			foundcount = len(found)
+			switch len(found) {
+			case 0:
+				if dryRun {
+					Info("Would create virtual machine object")
+				} else {
+					Info("Creating virtual machine object")
+
+					status, err := netbox.NewInventoryItemStatusValueFromValue("active")
+					if err != nil {
+						handleError("Validation of new status value", err)
+					}
+
+					request := netbox.WritableVirtualMachineWithConfigContextRequest{
+						Name:    name,
+						Site:    *netbox.NewNullableBriefSiteRequest(netbox.NewBriefSiteRequest("Prague - PRG2", "prg2")),
+						Cluster: *netbox.NewNullableBriefClusterRequest(netbox.NewBriefClusterRequest("Unmapped")),
+						Status:  status,
+						Memory:  *netbox.NewNullableInt32(&host.Memory),
+						Vcpus:   *netbox.NewNullableFloat64(&host.CPUs),
+					}
+					Debug("Adding CPU %f", host.CPUs)
+					Debug("Payload: %+v", request)
+					created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesCreate(ctx).WritableVirtualMachineWithConfigContextRequest(request).Execute()
+					if rerr != nil {
+						Error("Creation of new virtual machine object failed, API returned: %s", rerr)
+					}
+					var body interface{}
+					jerr := json.NewDecoder(response.Body).Decode(&body)
+					handleError("Decoding response body", jerr)
+					if body != nil {
+						if rerr == nil {
+							Debug("%+v", body)
+						} else {
+							Error("%+v", body)
+						}
+					}
+					if rerr != nil || jerr != nil {
+						os.Exit(1)
+					}
+					Debug("Created %+v", created)
+				}
+
+			case 1:
+				if dryRun {
+					Info("Would compare virtual machine object")
+				} else {
+					Info("TODO")
+				}
+
+			default:
+				Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
+			}
 
 		case "Physical":
 			query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name(nbname).Limit(2).Execute()
-			handleError("Failed to query devices: %s", err)
+			handleError("Query of devices", err)
 			found := query.Results
 			Info("Found devices: %v", found)
 			foundcount = len(found)
-		}
-
-		if foundcount == 0 {
-			if dryRun {
-				Info("Would create object")
-			}
-		} else if foundcount == 1 {
-			Info("Found object")
-		} else {
-			Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
 		}
 	}
 }
