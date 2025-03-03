@@ -311,11 +311,13 @@ func scanHost(host *zabbixHostData) bool {
 			}
 
 		case "vm.memory.size[total]":
-			memory_bytes, err := strconv.ParseInt(metric.Value, 10, 64)
+			memory_b, err := strconv.ParseInt(metric.Value, 10, 64)
 			if err == nil {
 				// for NB, memory needs to be in Megabytes
 				// should there be some check whether the calculated MB value actually fits into 32 bit?
-				host.Memory = int32(float64(memory_bytes) / (1 << 20))
+				memory_mb := int32(float64(memory_b) / (1 << 20))
+				Debug("Converted memory %d to %d", memory_b, memory_mb)
+				host.Memory = memory_mb
 			} else {
 				Error("Host %s (%s) serves invalid value for \"vm.memory.size\": %s - conversion to integer failed: %s", host.HostID, host.HostName, metric.Value, err)
 			}
