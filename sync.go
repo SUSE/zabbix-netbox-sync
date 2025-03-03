@@ -56,8 +56,12 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
 	handleError("Query of virtual machines", err)
 	found := query.Results
-	Info("Found virtual machines: %v", found)
+	Info("Found virtual machines: %+v", found)
 	foundcount := len(found)
+
+	memory := *netbox.NewNullableInt32(&host.Memory)
+	vcpus := *netbox.NewNullableFloat64(&host.CPUs)
+
 	switch foundcount {
 	case 0:
 		if dryRun {
@@ -75,8 +79,8 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 				Site:    *netbox.NewNullableBriefSiteRequest(netbox.NewBriefSiteRequest("Prague - PRG2", "prg2")),
 				Cluster: *netbox.NewNullableBriefClusterRequest(netbox.NewBriefClusterRequest("Unmapped")),
 				Status:  status,
-				Memory:  *netbox.NewNullableInt32(&host.Memory),
-				Vcpus:   *netbox.NewNullableFloat64(&host.CPUs),
+				Memory:  memory,
+				Vcpus:   vcpus,
 			}
 			Debug("Payload: %+v", request)
 			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesCreate(ctx).WritableVirtualMachineWithConfigContextRequest(request).Execute()
@@ -100,10 +104,53 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		}
 
 	case 1:
-		if dryRun {
-			Info("Would compare virtual machine object")
+		object := found[0]
+
+		request := *netbox.NewPatchedWritableVirtualMachineWithConfigContextRequest()
+
+		memory_new := *memory.Get()
+		memory_old := *object.Memory.Get()
+		if memory_new != memory_old {
+			Info("Memory changed: %d => %d", memory_old, memory_new)
+			request.Memory = memory
+		}
+
+		vcpus_new := *vcpus.Get()
+		vcpus_old := *object.Vcpus.Get()
+		if vcpus_new != vcpus_old {
+			Info("vCPUs changed: %f => %f", vcpus_old, vcpus_new)
+			request.Vcpus = vcpus
+		}
+
+		if request.HasMemory() || request.HasVcpus() {
+			Debug("Payload: %+v", request)
+
+			if dryRun {
+				Info("Would patch object")
+				return
+			}
+
+			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesPartialUpdate(ctx, object.Id).PatchedWritableVirtualMachineWithConfigContextRequest(request).Execute()
+			if rerr != nil {
+				Error("Update of virtual machine object failed, API returned: %s", rerr)
+			}
+			var body interface{}
+			jerr := json.NewDecoder(response.Body).Decode(&body)
+			handleError("Decoding response body", jerr)
+			if body != nil {
+				if rerr == nil {
+					Debug("%+v", body)
+				} else {
+					Error("%+v", body)
+				}
+			}
+			if rerr != nil || jerr != nil {
+				os.Exit(1)
+			}
+			Debug("Updated %+v", created)
+
 		} else {
-			Info("TODO")
+			Info("Nothing to do")
 		}
 
 	default:
