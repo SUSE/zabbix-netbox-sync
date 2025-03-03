@@ -20,7 +20,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/netbox-community/go-netbox/v4"
+	"net/http"
+	"os"
 )
 
 func nbConnect(url string, token string) (*netbox.APIClient, context.Context) {
@@ -43,4 +46,28 @@ func getDevices(nb *netbox.APIClient, ctx context.Context) *netbox.PaginatedDevi
 	Debug("getDevices() returns %v", result.Results)
 
 	return result
+}
+
+func handleResponse(created *netbox.VirtualMachineWithConfigContext, response *http.Response, err error) {
+	if err != nil {
+		Error("API returned: %s", err)
+	}
+
+	var body interface{}
+	jerr := json.NewDecoder(response.Body).Decode(&body)
+	handleError("Decoding response body", jerr)
+
+	if body != nil {
+		if err == nil {
+			Debug("%+v", body)
+		} else {
+			Error("%+v", body)
+		}
+	}
+
+	if err != nil || jerr != nil {
+		os.Exit(1)
+	}
+
+	Debug("Created %+v", created)
 }

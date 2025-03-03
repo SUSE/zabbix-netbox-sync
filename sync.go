@@ -20,10 +20,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/fabiang/go-zabbix"
 	"github.com/netbox-community/go-netbox/v4"
-	"os"
 )
 
 func prepare(z *zabbix.Session, zh *zabbixHosts) {
@@ -84,23 +82,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 			}
 			Debug("Payload: %+v", request)
 			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesCreate(ctx).WritableVirtualMachineWithConfigContextRequest(request).Execute()
-			if rerr != nil {
-				Error("Creation of new virtual machine object failed, API returned: %s", rerr)
-			}
-			var body interface{}
-			jerr := json.NewDecoder(response.Body).Decode(&body)
-			handleError("Decoding response body", jerr)
-			if body != nil {
-				if rerr == nil {
-					Debug("%+v", body)
-				} else {
-					Error("%+v", body)
-				}
-			}
-			if rerr != nil || jerr != nil {
-				os.Exit(1)
-			}
-			Debug("Created %+v", created)
+			handleResponse(created, response, rerr)
 		}
 
 	case 1:
@@ -131,23 +113,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 			}
 
 			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesPartialUpdate(ctx, object.Id).PatchedWritableVirtualMachineWithConfigContextRequest(request).Execute()
-			if rerr != nil {
-				Error("Update of virtual machine object failed, API returned: %s", rerr)
-			}
-			var body interface{}
-			jerr := json.NewDecoder(response.Body).Decode(&body)
-			handleError("Decoding response body", jerr)
-			if body != nil {
-				if rerr == nil {
-					Debug("%+v", body)
-				} else {
-					Error("%+v", body)
-				}
-			}
-			if rerr != nil || jerr != nil {
-				os.Exit(1)
-			}
-			Debug("Updated %+v", created)
+			handleResponse(created, response, rerr)
 
 		} else {
 			Info("Nothing to do")
