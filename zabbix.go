@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/fabiang/go-zabbix"
 	"gopkg.in/yaml.v3"
+	"strconv"
 	"strings"
 )
 
@@ -45,6 +46,8 @@ type zabbixHostData struct {
 	Meta       zabbixHostMetaData
 	Label      string
 	Interfaces hostInterfaces
+	CPUs       float64
+	Memory     int32
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -298,10 +301,25 @@ func scanHost(host *zabbixHostData) bool {
 
 			Error("Host %s (%s) serves invalid metadata: %s", host.HostID, host.HostName, err)
 			host.Error = true
-		}
 
-		if have_agent_hostname && have_sys_hw_manufacturer && have_sys_hw_metadata {
-			break
+		case "system.cpu.num":
+			cpus, err := strconv.ParseFloat(metric.Value, 64)
+			if err == nil {
+				host.CPUs = cpus
+			} else {
+				Error("Host %s (%s) serves invalid value for \"sys.cpu.count\": %s - conversion to float failed: %s", host.HostID, host.HostName, metric.Value, err)
+			}
+
+		case "vm.memory.size[total]":
+			memory_bytes, err := strconv.ParseInt(metric.Value, 10, 64)
+			if err == nil {
+				// for NB, memory needs to be in Megabytes
+				// should there be some check whether the calculated MB value actually fits into 32 bit?
+				host.Memory = int32(float64(memory_bytes) / (1 << 20))
+			} else {
+				Error("Host %s (%s) serves invalid value for \"vm.memory.size\": %s - conversion to integer failed: %s", host.HostID, host.HostName, metric.Value, err)
+			}
+
 		}
 	}
 
