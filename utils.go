@@ -55,10 +55,14 @@ func Error(format string, args ...any) {
 	logger.Error(fmt.Sprintf(format, args...))
 }
 
+func Fatal(format string, args ...any) {
+	Error(format, args...)
+	os.Exit(1)
+}
+
 func handleError(action string, err error) {
 	if err != nil {
-		Error("%s failed: %s", action, err)
-		os.Exit(1)
+		Fatal("%s failed: %s", action, err)
 	}
 }
 
