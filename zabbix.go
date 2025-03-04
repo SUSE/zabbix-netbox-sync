@@ -40,6 +40,7 @@ type linuxInterface struct {
 	Type      int64
 }
 
+type linuxInterfaces map[string]*linuxInterface
 type zabbixHostMetaData map[string]string
 
 type zabbixHostData struct {
@@ -50,12 +51,21 @@ type zabbixHostData struct {
 	ObjType    string
 	Meta       zabbixHostMetaData
 	Label      string
-	Interfaces []linuxInterface
+	Interfaces linuxInterfaces
 	CPUs       float64
 	Memory     int32
 }
 
 type zabbixHosts map[string]*zabbixHostData
+
+func getInterface(host *zabbixHostData, name string) *linuxInterface {
+	_, exists := host.Interfaces[name]
+	if !exists {
+		host.Interfaces[name] = new(linuxInterface)
+	}
+
+	return host.Interfaces[name]
+}
 
 func zConnect(baseUrl string, user string, pass string) *zabbix.Session {
 	url := fmt.Sprintf("%s/api_jsonrpc.php", baseUrl)
@@ -267,8 +277,7 @@ func scanHost(host *zabbixHostData) bool {
 	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
 
-	ifaddresses := make(map[string][]string)
-	iftypes := make(map[string]int64)
+	host.Interfaces = make(linuxInterfaces)
 
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
@@ -280,12 +289,8 @@ func scanHost(host *zabbixHostData) bool {
 			if len(addresses) == 0 {
 				Debug("scanHost() ignoring host %s interface %s due to nil address", host.HostName, name)
 			} else {
-				_, exists := ifaddresses[name]
-				if exists {
-					ifaddresses[name] = append(ifaddresses[name], addresses...)
-				} else {
-					ifaddresses[name] = addresses
-				}
+				inf := getInterface(host, name)
+				inf.Addresses = append(inf.Addresses, addresses...)
 			}
 
 			continue
@@ -302,7 +307,8 @@ func scanHost(host *zabbixHostData) bool {
 					continue
 				}
 
-				iftypes[name] = i
+				inf := getInterface(host, name)
+				inf.Type = i
 			}
 
 			continue
@@ -377,26 +383,6 @@ func scanHost(host *zabbixHostData) bool {
 
 	if !have_sys_hw_metadata {
 		Warn("Host %s (%s) is missing the 'sys.hw.metadata' item.", host.HostID, host.HostName)
-	}
-
-	for name1, t := range iftypes {
-		found := false
-		for name2, addresses := range ifaddresses {
-			if name1 == name2 {
-				found = true
-				host.Interfaces = append(host.Interfaces, linuxInterface{
-					Name:      name1,
-					Type:      t,
-					Addresses: addresses,
-				})
-
-				break
-			}
-		}
-
-		if found {
-			Debug("Constructed interfaces for host %s: %+v", host.HostName, host.Interfaces)
-		}
 	}
 
 	if !have_agent_hostname || !have_sys_hw_manufacturer {
