@@ -24,8 +24,7 @@ import (
 	"github.com/netbox-community/go-netbox/v4"
 )
 
-func prepare(z *zabbix.Session, zh *zabbixHosts) {
-	whitelistedHostgroups := []string{"Owners/Engineering/Infrastructure"}
+func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string) {
 	workHosts := getHosts(z, filterHostGroupIds(getHostGroups(z), whitelistedHostgroups))
 	hostIds := filterHostIds(workHosts)
 	filterHostInterfaces(zh, getHostInterfaces(z, hostIds))

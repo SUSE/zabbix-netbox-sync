@@ -1,0 +1,4 @@
+netbox: https://netbox.example.com
+zabbix: https://zabbix.example.com
+hostgroups:
+  - Corporate/Team/Subteam

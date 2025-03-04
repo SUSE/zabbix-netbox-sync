@@ -29,40 +29,30 @@ var (
 )
 
 func main() {
+	var configPath string
 	var logLevelStr string
-	var netboxUrl string
-	var zabbixUrl string
 	var runDry bool
 	var runWet bool
 
+	flag.StringVar(&configPath, "config", "./config.yaml", "Path to configuration file")
 	flag.StringVar(&logLevelStr, "loglevel", "info", "Logging level")
-	flag.StringVar(&netboxUrl, "netbox", "", "URL to a NetBox instance")
-	flag.StringVar(&zabbixUrl, "zabbix", "", "URL to a Zabbix instance")
 	flag.BoolVar(&runDry, "dry", false, "Run without performing any changes")
 	flag.BoolVar(&runWet, "wet", false, "Run and perform changes")
 	flag.Parse()
 
 	logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: convertLogLevel(logLevelStr)}))
 
-	problem := false
-
-	if zabbixUrl == "" || netboxUrl == "" {
-		Error("Specify -netbox <URL> and -zabbix <URL>.")
-		problem = true
+	config, err := readConfig(configPath)
+	if err != nil {
+		Fatal("%s", err)
 	}
 
 	if runDry && runWet {
-		Error("Specify -dry OR -wet, not both.")
-		problem = true
+		Fatal("Specify -dry OR -wet, not both.")
 	}
 
 	if !runDry && !runWet {
-		Error("Specify -dry OR -wet.")
-		problem = true
-	}
-
-	if problem {
-		os.Exit(1)
+		Fatal("Specify -dry OR -wet.")
 	}
 
 	var netboxToken string
@@ -77,10 +67,10 @@ func main() {
 		zabbixUser = "guest"
 	}
 
-	z := zConnect(zabbixUrl, zabbixUser, zabbixPassphrase)
-	nb, nbctx := nbConnect(netboxUrl, netboxToken)
+	z := zConnect(config.Zabbix, zabbixUser, zabbixPassphrase)
+	nb, nbctx := nbConnect(config.NetBox, netboxToken)
 
 	zh := make(zabbixHosts)
-	prepare(z, &zh)
+	prepare(z, &zh, config.HostGroups)
 	sync(&zh, nb, nbctx, runDry)
 }
