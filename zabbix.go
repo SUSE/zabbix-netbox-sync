@@ -34,8 +34,13 @@ type zabbixMetric struct {
 	Error string
 }
 
+type linuxInterface struct {
+	Name      string
+	Addresses []string
+	Type      int64
+}
+
 type zabbixHostMetaData map[string]string
-type hostInterfaces map[string][]string
 
 type zabbixHostData struct {
 	HostID     string
@@ -45,7 +50,7 @@ type zabbixHostData struct {
 	ObjType    string
 	Meta       zabbixHostMetaData
 	Label      string
-	Interfaces hostInterfaces
+	Interfaces []linuxInterface
 	CPUs       float64
 	Memory     int32
 }
@@ -223,8 +228,16 @@ func detectInterfaceMetric(name string) bool {
 	return strings.HasPrefix(name, "net.if.")
 }
 
+func detectFileContentsMetric(name string) bool {
+	return strings.HasPrefix(name, "vfs.file.contents[")
+}
+
+func detectInterfaceTypePath(name string) bool {
+	return strings.HasPrefix(name, "/sys/class/net/") && strings.HasSuffix(name, "/type")
+}
+
 func parseInterfaceMetric(zm zabbixMetric) (string, string, []string) {
-	// dissect net.if.ip4[\"eth2\"] without regex
+	// dissect net.if.ip4["eth2"] without regex
 	mkeysplit := strings.SplitN(strings.Replace(zm.Key, "]", "", 1), "[", 2)
 	Debug("parseInterfaceMetric() split to %+v", mkeysplit)
 	family := strings.SplitN(mkeysplit[0], ".", 3)[2]
@@ -235,13 +248,27 @@ func parseInterfaceMetric(zm zabbixMetric) (string, string, []string) {
 	return name, family, addresses
 }
 
+func parseFileContentsMetric(zm zabbixMetric) (string, string) {
+	// dissect vfs.file.contents["/sys/class/net/eth2/type"] without regex
+	basekey := strings.SplitN(strings.Replace(zm.Key, "]", "", 1), "[", 2)
+	indexkey := strings.Replace(basekey[1], "\"", "", 2)
+	value := zm.Value
+
+	return indexkey, value
+}
+
+func parseInterfaceTypePath(path string) string {
+	// /sys/class/net/eth2/type => eth2
+	return strings.SplitN(path, "/", 6)[4]
+}
+
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
 	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
 
-	// maybe this would be prettier in a constructor function called in filterHostInterfaces()
-	host.Interfaces = make(hostInterfaces)
+	ifaddresses := make(map[string][]string)
+	iftypes := make(map[string]int64)
 
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
@@ -253,14 +280,29 @@ func scanHost(host *zabbixHostData) bool {
 			if len(addresses) == 0 {
 				Debug("scanHost() ignoring host %s interface %s due to nil address", host.HostName, name)
 			} else {
-				_, exists := host.Interfaces[name]
+				_, exists := ifaddresses[name]
 				if exists {
-					host.Interfaces[name] = append(host.Interfaces[name], addresses...)
+					ifaddresses[name] = append(ifaddresses[name], addresses...)
 				} else {
-					host.Interfaces[name] = addresses
+					ifaddresses[name] = addresses
+				}
+			}
+
+			continue
+		}
+
+		if detectFileContentsMetric(mkey) {
+			key, value := parseFileContentsMetric(metric)
+			if detectInterfaceTypePath(key) {
+				name := parseInterfaceTypePath(key)
+
+				i, err := strconv.ParseInt(value, 10, 32)
+				if err != nil {
+					Error("Host %s (%s) serves invalid value for interface type", host.HostID, host.HostName)
+					continue
 				}
 
-				Debug("scanHost() updated host %s interfaces %+v", host.HostName, host.Interfaces[name])
+				iftypes[name] = i
 			}
 
 			continue
@@ -335,6 +377,26 @@ func scanHost(host *zabbixHostData) bool {
 
 	if !have_sys_hw_metadata {
 		Warn("Host %s (%s) is missing the 'sys.hw.metadata' item.", host.HostID, host.HostName)
+	}
+
+	for name1, t := range iftypes {
+		found := false
+		for name2, addresses := range ifaddresses {
+			if name1 == name2 {
+				found = true
+				host.Interfaces = append(host.Interfaces, linuxInterface{
+					Name:      name1,
+					Type:      t,
+					Addresses: addresses,
+				})
+
+				break
+			}
+		}
+
+		if found {
+			Debug("Constructed interfaces for host %s: %+v", host.HostName, host.Interfaces)
+		}
 	}
 
 	if !have_agent_hostname || !have_sys_hw_manufacturer {

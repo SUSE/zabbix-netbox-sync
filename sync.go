@@ -43,6 +43,7 @@ func prepare(z *zabbix.Session, zh *zabbixHosts) {
 		"system.cpu.num",
 		"system.sw.arch",
 		"vm.memory.size[total]",
+		"vfs.file.contents[\"/sys/class/net/*/type\"]",
 	}
 
 	filterItems(zh, getItems(z, hostIds, search), search["key_"])
