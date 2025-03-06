@@ -23,7 +23,6 @@ import (
 	"github.com/fabiang/go-zabbix"
 	"gopkg.in/yaml.v3"
 	"strconv"
-	"strings"
 )
 
 type zabbixMetric struct {
@@ -44,28 +43,19 @@ type linuxInterfaces map[string]*linuxInterface
 type zabbixHostMetaData map[string]string
 
 type zabbixHostData struct {
-	HostID     string
-	HostName   string
-	Metrics    []zabbixMetric
-	Error      bool
-	ObjType    string
-	Meta       zabbixHostMetaData
-	Label      string
-	Interfaces linuxInterfaces
+	HostID   string
+	HostName string
+	Metrics  []zabbixMetric
+	Error    bool
+	ObjType  string
+	Meta     zabbixHostMetaData
+	Label    string
+	Interfaces ipRoute2Interfaces
 	CPUs       float64
 	Memory     int32
 }
 
 type zabbixHosts map[string]*zabbixHostData
-
-func getInterface(host *zabbixHostData, name string) *linuxInterface {
-	_, exists := host.Interfaces[name]
-	if !exists {
-		host.Interfaces[name] = new(linuxInterface)
-	}
-
-	return host.Interfaces[name]
-}
 
 func zConnect(baseUrl string, user string, pass string) *zabbix.Session {
 	url := fmt.Sprintf("%s/api_jsonrpc.php", baseUrl)
@@ -234,90 +224,24 @@ func scanHostMetadata(host *zabbixHostData) {
 	return
 }
 
-func detectInterfaceMetric(name string) bool {
-	return strings.HasPrefix(name, "net.if.")
-}
-
-func detectFileContentsMetric(name string) bool {
-	return strings.HasPrefix(name, "vfs.file.contents[")
-}
-
-func detectInterfaceTypePath(name string) bool {
-	return strings.HasPrefix(name, "/sys/class/net/") && strings.HasSuffix(name, "/type")
-}
-
-func parseInterfaceMetric(zm zabbixMetric) (string, string, []string) {
-	// dissect net.if.ip4["eth2"] without regex
-	mkeysplit := strings.SplitN(strings.Replace(zm.Key, "]", "", 1), "[", 2)
-	Debug("parseInterfaceMetric() split to %+v", mkeysplit)
-	family := strings.SplitN(mkeysplit[0], ".", 3)[2]
-	name := strings.Replace(strings.Replace(mkeysplit[1], "\"", "", 2), "\"", "", 2)
-	Debug("parseInterfaceMetric() set family \"%s\" name \"%s\"", family, name)
-	addresses := strings.Split(zm.Value, "\n")
-
-	return name, family, addresses
-}
-
-func parseFileContentsMetric(zm zabbixMetric) (string, string) {
-	// dissect vfs.file.contents["/sys/class/net/eth2/type"] without regex
-	basekey := strings.SplitN(strings.Replace(zm.Key, "]", "", 1), "[", 2)
-	indexkey := strings.Replace(basekey[1], "\"", "", 2)
-	value := zm.Value
-
-	return indexkey, value
-}
-
-func parseInterfaceTypePath(path string) string {
-	// /sys/class/net/eth2/type => eth2
-	return strings.SplitN(path, "/", 6)[4]
-}
-
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
 	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
-
-	host.Interfaces = make(linuxInterfaces)
 
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
 
 		mkey := metric.Key
 
-		if detectInterfaceMetric(mkey) {
-			name, _, addresses := parseInterfaceMetric(metric)
-			if len(addresses) == 0 {
-				Debug("scanHost() ignoring host %s interface %s due to nil address", host.HostName, name)
-			} else {
-				inf := getInterface(host, name)
-				inf.Addresses = append(inf.Addresses, addresses...)
-			}
-
-			continue
-		}
-
-		if detectFileContentsMetric(mkey) {
-			key, value := parseFileContentsMetric(metric)
-			if detectInterfaceTypePath(key) {
-				name := parseInterfaceTypePath(key)
-
-				i, err := strconv.ParseInt(value, 10, 32)
-				if err != nil {
-					Error("Host %s (%s) serves invalid value for interface type", host.HostID, host.HostName)
-					continue
-				}
-
-				inf := getInterface(host, name)
-				inf.Type = i
-			}
-
-			continue
-		}
-
 		switch mkey {
 
 		case "agent.hostname":
 			have_agent_hostname = true
+
+		case "net.if.ip.a.raw":
+			iinfs := parseIpRoute2AddressData(metric.Value)
+			host.Interfaces = iinfs
 
 		case "sys.hw.manufacturer":
 			have_sys_hw_manufacturer = true
@@ -372,6 +296,8 @@ func scanHost(host *zabbixHostData) bool {
 
 		}
 	}
+
+	Debug("Got host %s interface %s", host.HostName, host.Interfaces)
 
 	if !have_agent_hostname {
 		Error("Host %s (%s) is missing the 'agent.hostname' item.", host.HostID, host.HostName)
