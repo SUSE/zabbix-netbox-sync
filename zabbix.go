@@ -297,7 +297,7 @@ func scanHost(host *zabbixHostData) bool {
 		}
 	}
 
-	Debug("Got host %s interface %s", host.HostName, host.Interfaces)
+	Debug("Got host %s interface %v", host.HostName, host.Interfaces)
 
 	if !have_agent_hostname {
 		Error("Host %s (%s) is missing the 'agent.hostname' item.", host.HostID, host.HostName)

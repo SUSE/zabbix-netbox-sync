@@ -72,7 +72,7 @@ type ipRoute2Interfaces []*ipRoute2Interface
 func (infs ipRoute2Interfaces) String() string {
 	var out []string
 	for _, inf := range infs {
-		out = append(out, fmt.Sprintf("%s", *inf))
+		out = append(out, fmt.Sprintf("%v", *inf))
 	}
 	return strings.Join(out[:], "")
 }
