@@ -48,7 +48,7 @@ func getDevices(nb *netbox.APIClient, ctx context.Context) *netbox.PaginatedDevi
 	return result
 }
 
-func handleResponse(created *netbox.VirtualMachineWithConfigContext, response *http.Response, err error) {
+func handleResponse(created interface{}, response *http.Response, err error) {
 	if err != nil {
 		Error("API returned: %s", err)
 	}
@@ -69,5 +69,5 @@ func handleResponse(created *netbox.VirtualMachineWithConfigContext, response *h
 		os.Exit(1)
 	}
 
-	Debug("Created %+v", created)
+	Debug("Returned object: %+v", created)
 }
