@@ -403,7 +403,6 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 			vmobjid = created.Id
 
 		} else {
-			Info("Nothing to do")
 			vmobjid = object.Id
 		}
 
