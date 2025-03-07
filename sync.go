@@ -132,14 +132,20 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		request := *netbox.NewPatchedWritableVirtualMachineWithConfigContextRequest()
 
 		memory_new := *memory.Get()
-		memory_old := *object.Memory.Get()
+		var memory_old int32
+		if object.Memory.Get() != nil {
+			memory_old = *object.Memory.Get()
+		}
 		if memory_new != memory_old {
 			Info("Memory changed: %d => %d", memory_old, memory_new)
 			request.Memory = memory
 		}
 
 		vcpus_new := *vcpus.Get()
-		vcpus_old := *object.Vcpus.Get()
+		var vcpus_old float64
+		if object.Vcpus.Get() != nil {
+			vcpus_old = *object.Vcpus.Get()
+		}
 		if vcpus_new != vcpus_old {
 			Info("vCPUs changed: %f => %f", vcpus_old, vcpus_new)
 			request.Vcpus = vcpus
