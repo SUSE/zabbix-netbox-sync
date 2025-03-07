@@ -48,10 +48,16 @@ func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string)
 }
 
 func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string, dryRun bool) (int32, bool) {
+	// some interface types have an empty MAC address, for example WireGuard ones - behave as if the MAC address already exists
+	if address == "" {
+		return 0, true
+	}
+
 	Debug("Processing MAC address %s", address)
 	query, _, err := nb.DcimAPI.DcimMacAddressesList(ctx).MacAddress([]string{address}).Execute()
 	handleError("Query of MAC addresses", err)
 	found := query.Results
+	Debug("Found MAC addresses: %+v", found)
 
 	var objid int32
 	var assigned bool
