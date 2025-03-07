@@ -43,11 +43,11 @@ func readConfig(configPath string) (*Config, error) {
 	}
 
 	if config.NetBox == "" || config.Zabbix == "" {
-		return nil, fmt.Errorf("Configuration keys \"netbox\" and \"zabbix\" are required.")
+		return nil, fmt.Errorf("Configuration keys 'netbox' and 'zabbix' are required.")
 	}
 
 	if config.HostGroups == nil {
-		return nil, fmt.Errorf("Configuration key \"hostgroups\" is required, set empty array to disable filtering.")
+		return nil, fmt.Errorf("Configuration key 'hostgroups' is required, set empty array to disable filtering.")
 	}
 
 	return config, nil

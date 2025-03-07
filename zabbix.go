@@ -279,7 +279,7 @@ func scanHost(host *zabbixHostData) bool {
 			if err == nil {
 				host.CPUs = cpus
 			} else {
-				Error("Host %s (%s) serves invalid value for \"sys.cpu.count\": %s - conversion to float failed: %s", host.HostID, host.HostName, metric.Value, err)
+				Error("Host %s (%s) serves invalid value for 'sys.cpu.count': %s - conversion to float failed: %s", host.HostID, host.HostName, metric.Value, err)
 			}
 
 		case "vm.memory.size[total]":
@@ -291,7 +291,7 @@ func scanHost(host *zabbixHostData) bool {
 				Debug("Converted memory %d to %d", memory_b, memory_mb)
 				host.Memory = memory_mb
 			} else {
-				Error("Host %s (%s) serves invalid value for \"vm.memory.size\": %s - conversion to integer failed: %s", host.HostID, host.HostName, metric.Value, err)
+				Error("Host %s (%s) serves invalid value for 'vm.memory.size': %s - conversion to integer failed: %s", host.HostID, host.HostName, metric.Value, err)
 			}
 
 		}

@@ -59,11 +59,11 @@ func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string
 	switch len(found) {
 	case 0:
 		if dryRun {
-			Info("Would create MAC address object \"%s\"", address)
+			Info("Would create MAC address object '%s'", address)
 			return objid, assigned
 		}
 
-		Info("Creating MAC address object \"%s\"", address)
+		Info("Creating MAC address object '%s'", address)
 
 		created, response, rerr := nb.DcimAPI.DcimMacAddressesCreate(ctx).MACAddressRequest(*netbox.NewMACAddressRequest(address)).Execute()
 		handleResponse(created, response, rerr)
@@ -72,7 +72,7 @@ func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string
 		assigned = false
 
 	case 1:
-		Debug("MAC address object \"%s\" already exists", address)
+		Debug("MAC address object '%s' already exists", address)
 
 		objid = found[0].Id
 
@@ -81,7 +81,7 @@ func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string
 		}
 
 	default:
-		Warn("MAC address object \"%s\" exists multiple times", address)
+		Warn("MAC address object '%s' exists multiple times", address)
 	}
 
 	return objid, assigned
