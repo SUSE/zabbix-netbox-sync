@@ -31,11 +31,13 @@ var (
 func main() {
 	var configPath string
 	var logLevelStr string
+	var limit string
 	var runDry bool
 	var runWet bool
 
 	flag.StringVar(&configPath, "config", "./config.yaml", "Path to configuration file")
 	flag.StringVar(&logLevelStr, "loglevel", "info", "Logging level")
+	flag.StringVar(&limit, "limit", "", "Host to limit the sync to")
 	flag.BoolVar(&runDry, "dry", false, "Run without performing any changes")
 	flag.BoolVar(&runWet, "wet", false, "Run and perform changes")
 	flag.Parse()
@@ -72,5 +74,5 @@ func main() {
 
 	zh := make(zabbixHosts)
 	prepare(z, &zh, config.HostGroups)
-	sync(&zh, nb, nbctx, runDry)
+	sync(&zh, nb, nbctx, runDry, limit)
 }

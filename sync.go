@@ -265,7 +265,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 	}
 }
 
-func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
+func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string) {
 	for _, host := range *zh {
 		if host.Error {
 			Warn("Skipping processing of host %s.", host.HostName)
@@ -274,6 +274,10 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 		}
 
 		name := host.HostName
+
+		if limit != "" && name != limit {
+			continue
+		}
 
 		Info("Processing host %s", name)
 
