@@ -260,12 +260,12 @@ func scanHost(host *zabbixHostData) bool {
 
 			metadata, ok, err := parseHostMetadata(metric.Value)
 			if err == nil {
-				host.Meta = metadata
-
 				if !ok {
 					Warn("Host %s (%s) serves empty metadata", host.HostID, host.HostName)
+					break
 				}
 
+				host.Meta = metadata
 				scanHostMetadata(host)
 
 				break
