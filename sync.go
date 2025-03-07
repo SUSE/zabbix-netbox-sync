@@ -172,10 +172,15 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
 	}
 
-	ifquery, _, err := nb.VirtualizationAPI.VirtualizationInterfacesList(ctx).VirtualMachineId([]int32{vmobjid}).Execute()
-	handleError("Query of virtual machine interfaces", err)
-	iffound := ifquery.Results
-	Info("Found virtual machine interfaces: %+v", iffound)
+	var iffound []netbox.VMInterface
+
+	if vmobjid > 0 {
+		ifquery, response, err := nb.VirtualizationAPI.VirtualizationInterfacesList(ctx).VirtualMachineId([]int32{vmobjid}).Execute()
+		handleResponse(ifquery, response, err)
+		handleError("Query of virtual machine interfaces", err)
+		iffound = ifquery.Results
+		Info("Found virtual machine interfaces: %+v", iffound)
+	}
 
 	for _, inf := range host.Interfaces {
 		if inf.IfName == "lo" {
