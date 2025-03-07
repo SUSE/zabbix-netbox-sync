@@ -43,13 +43,13 @@ type linuxInterfaces map[string]*linuxInterface
 type zabbixHostMetaData map[string]string
 
 type zabbixHostData struct {
-	HostID   string
-	HostName string
-	Metrics  []zabbixMetric
-	Error    bool
-	ObjType  string
-	Meta     zabbixHostMetaData
-	Label    string
+	HostID     string
+	HostName   string
+	Metrics    []zabbixMetric
+	Error      bool
+	ObjType    string
+	Meta       zabbixHostMetaData
+	Label      string
 	Interfaces ipRoute2Interfaces
 	CPUs       float64
 	Memory     int32
