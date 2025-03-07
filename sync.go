@@ -93,6 +93,102 @@ func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string
 	return objid, assigned
 }
 
+func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, vmname string, vmobjid int32, dryRun bool) {
+	var iffound []netbox.VMInterface
+
+	if vmobjid > 0 {
+		ifquery, response, err := nb.VirtualizationAPI.VirtualizationInterfacesList(ctx).VirtualMachineId([]int32{vmobjid}).Execute()
+		handleResponse(ifquery, response, err)
+		handleError("Query of virtual machine interfaces", err)
+		iffound = ifquery.Results
+		Debug("Found virtual machine interfaces: %+v", iffound)
+	}
+
+	for _, inf := range host.Interfaces {
+		if inf.IfName == "lo" {
+			continue
+		}
+
+		mtu := *netbox.NewNullableInt32(&inf.Mtu)
+
+		var found bool
+		var intobjid int32
+		var nbinf netbox.VMInterface
+
+		Debug("Scanning %+v", inf)
+		for _, nbif := range iffound {
+			if inf.IfName == nbif.Name {
+				// UPDATE
+				found = true
+				intobjid = nbif.Id
+				nbinf = nbif
+
+				break
+			}
+		}
+
+		macobjid, macassigned := processMacAddress(nb, ctx, inf.Address, dryRun)
+
+		if found {
+			request := *netbox.NewPatchedWritableVMInterfaceRequest()
+
+			mtu_new := *mtu.Get()
+			mtu_old := *nbinf.Mtu.Get()
+			if mtu_new != mtu_old {
+				Info("MTU changed: %d => %d", mtu_old, mtu_new)
+				request.Mtu = mtu
+			}
+
+			// TODO: compare/update tagged VLANs
+
+			if request.HasMtu() {
+				Debug("Payload: %+v", request)
+
+				if dryRun {
+					Info("Would patch object")
+					continue
+				}
+
+				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesPartialUpdate(ctx, intobjid).PatchedWritableVMInterfaceRequest(request).Execute()
+				handleResponse(created, response, rerr)
+			}
+
+		} else {
+			if dryRun {
+				Info("Would create interface object")
+			} else {
+				request := netbox.WritableVMInterfaceRequest{
+					VirtualMachine: *netbox.NewBriefVirtualMachineRequest(vmname),
+					Name:           inf.IfName,
+					Mtu:            mtu,
+					TaggedVlans:    *new([]int32),
+					Enabled:        netbox.PtrBool(true),
+				}
+
+				mode, err := netbox.NewPatchedWritableInterfaceRequestModeFromValue("tagged")
+				handleError("Constructing 802.1Q mode from string", err)
+
+				if inf.LinkInfo.Kind == "vlan" {
+					request.Mode = *netbox.NewNullablePatchedWritableInterfaceRequestMode(mode)
+					request.TaggedVlans = append(request.TaggedVlans, inf.LinkInfo.Data.(iproute2LinkInfoDataVlan).Id)
+				}
+
+				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesCreate(ctx).WritableVMInterfaceRequest(request).Execute()
+				handleResponse(created, response, rerr)
+
+				intobjid = created.Id
+
+			}
+		}
+
+		if macobjid > 0 && !macassigned && !dryRun {
+			assignMacAddress(nb, ctx, macobjid, inf.Address, "virtualization.vminterface", int64(intobjid))
+		}
+
+	}
+}
+
+
 func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	name := host.HostName
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
@@ -178,97 +274,8 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
 	}
 
-	var iffound []netbox.VMInterface
+	processVirtualMachineInterface(host, nb, ctx, name, vmobjid, dryRun)
 
-	if vmobjid > 0 {
-		ifquery, response, err := nb.VirtualizationAPI.VirtualizationInterfacesList(ctx).VirtualMachineId([]int32{vmobjid}).Execute()
-		handleResponse(ifquery, response, err)
-		handleError("Query of virtual machine interfaces", err)
-		iffound = ifquery.Results
-		Debug("Found virtual machine interfaces: %+v", iffound)
-	}
-
-	for _, inf := range host.Interfaces {
-		if inf.IfName == "lo" {
-			continue
-		}
-
-		mtu := *netbox.NewNullableInt32(&inf.Mtu)
-
-		var found bool
-		var intobjid int32
-		var nbinf netbox.VMInterface
-
-		Debug("Scanning %+v", inf)
-		for _, nbif := range iffound {
-			if inf.IfName == nbif.Name {
-				// UPDATE
-				found = true
-				intobjid = nbif.Id
-				nbinf = nbif
-
-				break
-			}
-		}
-
-		macobjid, macassigned := processMacAddress(nb, ctx, inf.Address, dryRun)
-
-		if found {
-			request := *netbox.NewPatchedWritableVMInterfaceRequest()
-
-			mtu_new := *mtu.Get()
-			mtu_old := *nbinf.Mtu.Get()
-			if mtu_new != mtu_old {
-				Info("MTU changed: %d => %d", mtu_old, mtu_new)
-				request.Mtu = mtu
-			}
-
-			// TODO: compare/update tagged VLANs
-
-			if request.HasMtu() {
-				Debug("Payload: %+v", request)
-
-				if dryRun {
-					Info("Would patch object")
-					continue
-				}
-
-				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesPartialUpdate(ctx, intobjid).PatchedWritableVMInterfaceRequest(request).Execute()
-				handleResponse(created, response, rerr)
-			}
-		} else if !found {
-			if dryRun {
-				Info("Would create interface object")
-			} else {
-				request := netbox.WritableVMInterfaceRequest{
-					VirtualMachine: *netbox.NewBriefVirtualMachineRequest(name),
-					Name:           inf.IfName,
-					Mtu:            mtu,
-					TaggedVlans:    *new([]int32),
-					Enabled:        netbox.PtrBool(true),
-				}
-
-				mode, err := netbox.NewPatchedWritableInterfaceRequestModeFromValue("tagged")
-				handleError("Constructing 802.1Q mode from string", err)
-
-				if inf.LinkInfo.Kind == "vlan" {
-					request.Mode = *netbox.NewNullablePatchedWritableInterfaceRequestMode(mode)
-					request.TaggedVlans = append(request.TaggedVlans, inf.LinkInfo.Data.(iproute2LinkInfoDataVlan).Id)
-				}
-
-				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesCreate(ctx).WritableVMInterfaceRequest(request).Execute()
-				handleResponse(created, response, rerr)
-
-				intobjid = created.Id
-
-			}
-		}
-
-		if macobjid > 0 && !macassigned && !dryRun {
-			assignMacAddress(nb, ctx, macobjid, inf.Address, "virtualization.vminterface", int64(intobjid))
-		}
-
-	}
 }
 
 func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string) {
