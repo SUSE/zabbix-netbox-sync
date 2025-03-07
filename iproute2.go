@@ -54,12 +54,12 @@ type iproute2LinkInfoDataBridge struct {
 
 type iproute2LinkInfoDataVlan struct {
 	Protocol string `json:"protocol"`
-	Id       int    `json:"id"`
+	Id       int32  `json:"id"`
 }
 
 type ipRoute2Interface struct {
 	IfName    string             `json:"ifname"`
-	Mtu       int                `json:"mtu"`
+	Mtu       int32              `json:"mtu"`
 	OperState string             `json:"operstate"`
 	LinkType  string             `json:"link_type"`
 	Address   string             `json:"address"`
