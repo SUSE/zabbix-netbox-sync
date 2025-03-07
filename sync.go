@@ -92,7 +92,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
 	handleError("Query of virtual machines", err)
 	found := query.Results
-	Info("Found virtual machines: %+v", found)
+	Debug("Found virtual machines: %+v", found)
 	foundcount := len(found)
 
 	memory := *netbox.NewNullableInt32(&host.Memory)
@@ -179,7 +179,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		handleResponse(ifquery, response, err)
 		handleError("Query of virtual machine interfaces", err)
 		iffound = ifquery.Results
-		Info("Found virtual machine interfaces: %+v", iffound)
+		Debug("Found virtual machine interfaces: %+v", iffound)
 	}
 
 	for _, inf := range host.Interfaces {
@@ -268,8 +268,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string) {
 	for _, host := range *zh {
 		if host.Error {
-			Warn("Skipping processing of host %s.", host.HostName)
-
+			Debug("Skipping processing of host %s.", host.HostName)
 			continue
 		}
 
@@ -292,7 +291,7 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 			query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name(nbname).Limit(2).Execute()
 			handleError("Query of devices", err)
 			found := query.Results
-			Info("Found devices: %v", found)
+			Debug("Found devices: %v", found)
 		}
 	}
 }
