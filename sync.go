@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/fabiang/go-zabbix"
 	"github.com/netbox-community/go-netbox/v4"
 )
@@ -93,6 +94,124 @@ func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string
 	return objid, assigned
 }
 
+func processIpAddress(hinf *ipRoute2Interface, nbobjtype string, nbinfid int64, nb *netbox.APIClient, ctx context.Context, dnsname string, dryRun bool) {
+	for _, address := range hinf.AddrInfo {
+		if isLinkLocal(address.Local) {
+			Debug("Skipping link local IP adress %s", address.Local)
+			// currently we do not track these in NetBox
+			// it might make sense to later add logic to differentiate SLAAC and Privacy addresses
+			continue
+		}
+
+		cidraddress := fmt.Sprintf("%s/%d", address.Local, address.Prefixlen)
+
+		Debug("Processing IP address %s", cidraddress)
+
+		ipquery, response, err := nb.IpamAPI.IpamIpAddressesList(ctx).Address([]string{cidraddress}).Execute()
+		handleResponse(ipquery, response, err)
+		handleError("Query of IP addresses", err)
+		ipfound := ipquery.Results
+		Debug("Found IP addresses: %+v", ipfound)
+		foundcount := len(ipfound)
+
+		var found bool
+		var ipobjid int32
+		var nbipo netbox.IPAddress
+		var unassignedcount int
+
+		for _, nbip := range ipfound {
+			aobjid := nbip.GetAssignedObjectId()
+
+			if aobjid == nbinfid {
+				found = true
+				ipobjid = nbip.Id
+				nbipo = nbip
+				break
+			}
+
+			if aobjid == 0 {
+				unassignedcount++
+				// ipobjid and nbipo can be overwritten here by design
+				ipobjid = nbip.Id
+				nbipo = nbip
+			}
+		}
+
+		// found IP address assigned to the desired interface
+		//   => update
+		// OR
+		// found single unassigned IP address
+		//   => update and assign
+		// OR
+		// found multiple unassigned IP addresses
+		//   => bail out
+		// OR
+		// found no IP addresses
+		//   => create
+
+		if found || foundcount == 1 {
+			request := *netbox.NewPatchedWritableIPAddressRequest()
+
+			if dnsname != "" && dnsname != *nbipo.DnsName {
+				Info("DNS Name changed: %s => %s", *nbipo.DnsName, dnsname)
+				request.SetDnsName(dnsname)
+			}
+
+			if request.HasDnsName() {
+				Debug("Payload: %+v", request)
+
+				if dryRun {
+					Info("Would patch object")
+					continue
+				}
+
+				nb.IpamAPI.IpamIpAddressesPartialUpdate(ctx, ipobjid).PatchedWritableIPAddressRequest(request).Execute()
+			}
+		}
+
+		if foundcount == 1 && unassignedcount == 1 {
+			if dryRun {
+				Info("Would assign existing IP address object")
+				continue
+			}
+
+			assignIpAddress(nb, ctx, ipobjid, cidraddress, nbobjtype, nbinfid)
+
+		} else if foundcount > 1 && unassignedcount > 1 {
+			Error("Multiple unassigned IP addresses match %s, cannot decide", cidraddress)
+
+		} else if foundcount == 0 && unassignedcount == 0 {
+			if dryRun {
+				Info("Would create IP address object")
+				continue
+			}
+
+			status, err := netbox.NewPatchedWritableIPAddressRequestStatusFromValue("active")
+			if err != nil {
+				handleError("Validation of new status value", err)
+			}
+
+			request := netbox.WritableIPAddressRequest{
+				Address:            cidraddress,
+				Status:             status,
+				AssignedObjectType: *netbox.NewNullableString(&nbobjtype),
+				AssignedObjectId:   *netbox.NewNullableInt64(&nbinfid),
+			}
+
+			if dnsname != "" {
+				request.SetDnsName(dnsname)
+			}
+
+			created, response, rerr := nb.IpamAPI.IpamIpAddressesCreate(ctx).WritableIPAddressRequest(request).Execute()
+			handleResponse(created, response, rerr)
+
+		} else if !found {
+			Debug("found %v, foundcount %d, unassignedcount %d", found, foundcount, unassignedcount)
+			Fatal("processIpAddress() unhandled situation, this should never happen")
+		}
+	}
+}
+
 func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, vmname string, vmobjid int32, dryRun bool) {
 	var iffound []netbox.VMInterface
 
@@ -102,6 +221,23 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 		handleError("Query of virtual machine interfaces", err)
 		iffound = ifquery.Results
 		Debug("Found virtual machine interfaces: %+v", iffound)
+	}
+
+	hinfcount := len(host.Interfaces)
+	for _, inf := range host.Interfaces {
+		if inf.IfName == "lo" {
+			hinfcount = hinfcount - 1
+			continue
+		}
+	}
+
+	var dnsname string
+
+	if hinfcount == 1 {
+		dnsname = vmname
+	} else {
+		// no logic to determine primary interface amongst multiple yet
+		dnsname = ""
 	}
 
 	for _, inf := range host.Interfaces {
@@ -185,9 +321,10 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 			assignMacAddress(nb, ctx, macobjid, inf.Address, "virtualization.vminterface", int64(intobjid))
 		}
 
+		processIpAddress(inf, "virtualization.vminterface", int64(intobjid), nb, ctx, dnsname, dryRun)
+
 	}
 }
-
 
 func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	name := host.HostName

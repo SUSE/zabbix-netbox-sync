@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/seancfoley/ipaddress-go/ipaddr"
 	"log/slog"
 	"os"
 )
@@ -74,4 +75,13 @@ func contains(values []string, value string) bool {
 	}
 
 	return false
+}
+
+func isLinkLocal(address string) bool {
+	ip := ipaddr.NewIPAddressString(address).GetAddress()
+	if ip == nil {
+		Fatal("Invalid IP address")
+	}
+
+	return ip.IsLinkLocal()
 }

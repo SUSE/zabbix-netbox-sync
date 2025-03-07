@@ -86,3 +86,18 @@ func assignMacAddress(nb *netbox.APIClient, ctx context.Context, objid int32, ad
 	created, response, rerr := nb.DcimAPI.DcimMacAddressesPartialUpdate(ctx, objid).PatchedMACAddressRequest(request).Execute()
 	handleResponse(created, response, rerr)
 }
+
+func assignIpAddress(nb *netbox.APIClient, ctx context.Context, objid int32, address string, aobjtype string, aobjid int64) {
+	Info("Assigning IP address object %d to %s object %d", objid, aobjtype, aobjid)
+
+	request := netbox.PatchedWritableIPAddressRequest{
+		Address:            &address,
+		AssignedObjectType: *netbox.NewNullableString(&aobjtype),
+		AssignedObjectId:   *netbox.NewNullableInt64(&aobjid),
+	}
+
+	Debug("Payload: %+v", request)
+
+	created, response, rerr := nb.IpamAPI.IpamIpAddressesPartialUpdate(ctx, objid).PatchedWritableIPAddressRequest(request).Execute()
+	handleResponse(created, response, rerr)
+}
