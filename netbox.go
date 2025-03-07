@@ -71,3 +71,18 @@ func handleResponse(created interface{}, response *http.Response, err error) {
 
 	Debug("Returned object: %+v", created)
 }
+
+func assignMacAddress(nb *netbox.APIClient, ctx context.Context, objid int32, address string, aobjtype string, aobjid int64) {
+	Info("Assigning MAC address object %d to %s object %d", objid, aobjtype, aobjid)
+
+	request := netbox.PatchedMACAddressRequest{
+		MacAddress:         &address,
+		AssignedObjectType: *netbox.NewNullableString(&aobjtype),
+		AssignedObjectId:   *netbox.NewNullableInt64(&aobjid),
+	}
+
+	Debug("Payload: %+v", request)
+
+	created, response, rerr := nb.DcimAPI.DcimMacAddressesPartialUpdate(ctx, objid).PatchedMACAddressRequest(request).Execute()
+	handleResponse(created, response, rerr)
+}

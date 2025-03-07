@@ -47,6 +47,46 @@ func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string)
 	scanHosts(zh)
 }
 
+func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string, dryRun bool) (int32, bool) {
+	Debug("Processing MAC address %s", address)
+	query, _, err := nb.DcimAPI.DcimMacAddressesList(ctx).MacAddress([]string{address}).Execute()
+	handleError("Query of MAC addresses", err)
+	found := query.Results
+
+	var objid int32
+	var assigned bool
+
+	switch len(found) {
+	case 0:
+		if dryRun {
+			Info("Would create MAC address object \"%s\"", address)
+			return objid, assigned
+		}
+
+		Info("Creating MAC address object \"%s\"", address)
+
+		created, response, rerr := nb.DcimAPI.DcimMacAddressesCreate(ctx).MACAddressRequest(*netbox.NewMACAddressRequest(address)).Execute()
+		handleResponse(created, response, rerr)
+
+		objid = created.Id
+		assigned = false
+
+	case 1:
+		Debug("MAC address object \"%s\" already exists", address)
+
+		objid = found[0].Id
+
+		if found[0].AssignedObjectType.IsSet() && found[0].AssignedObjectId.IsSet() {
+			assigned = true
+		}
+
+	default:
+		Warn("MAC address object \"%s\" exists multiple times", address)
+	}
+
+	return objid, assigned
+}
+
 func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	name := host.HostName
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
@@ -57,6 +97,8 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 
 	memory := *netbox.NewNullableInt32(&host.Memory)
 	vcpus := *netbox.NewNullableFloat64(&host.CPUs)
+
+	var vmobjid int32
 
 	switch foundcount {
 	case 0:
@@ -81,6 +123,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 			Debug("Payload: %+v", request)
 			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesCreate(ctx).WritableVirtualMachineWithConfigContextRequest(request).Execute()
 			handleResponse(created, response, rerr)
+			vmobjid = created.Id
 		}
 
 	case 1:
@@ -112,16 +155,104 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 
 			created, response, rerr := nb.VirtualizationAPI.VirtualizationVirtualMachinesPartialUpdate(ctx, object.Id).PatchedWritableVirtualMachineWithConfigContextRequest(request).Execute()
 			handleResponse(created, response, rerr)
+			vmobjid = created.Id
 
 		} else {
 			Info("Nothing to do")
+			vmobjid = object.Id
 		}
 
 	default:
 		Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
 	}
-}
 
+	ifquery, _, err := nb.VirtualizationAPI.VirtualizationInterfacesList(ctx).VirtualMachineId([]int32{vmobjid}).Execute()
+	handleError("Query of virtual machine interfaces", err)
+	iffound := ifquery.Results
+	Info("Found virtual machine interfaces: %+v", iffound)
+
+	for _, inf := range host.Interfaces {
+		if inf.IfName == "lo" {
+			continue
+		}
+
+		mtu := *netbox.NewNullableInt32(&inf.Mtu)
+
+		var found bool
+		var intobjid int32
+		var nbinf netbox.VMInterface
+
+		Debug("Scanning %+v", inf)
+		for _, nbif := range iffound {
+			if inf.IfName == nbif.Name {
+				// UPDATE
+				found = true
+				intobjid = nbif.Id
+				nbinf = nbif
+
+				break
+			}
+		}
+
+		macobjid, macassigned := processMacAddress(nb, ctx, inf.Address, dryRun)
+
+		if found {
+			request := *netbox.NewPatchedWritableVMInterfaceRequest()
+
+			mtu_new := *mtu.Get()
+			mtu_old := *nbinf.Mtu.Get()
+			if mtu_new != mtu_old {
+				Info("MTU changed: %d => %d", mtu_old, mtu_new)
+				request.Mtu = mtu
+			}
+
+			// TODO: compare/update tagged VLANs
+
+			if request.HasMtu() {
+				Debug("Payload: %+v", request)
+
+				if dryRun {
+					Info("Would patch object")
+					continue
+				}
+
+				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesPartialUpdate(ctx, intobjid).PatchedWritableVMInterfaceRequest(request).Execute()
+				handleResponse(created, response, rerr)
+			}
+		} else if !found {
+			if dryRun {
+				Info("Would create interface object")
+			} else {
+				request := netbox.WritableVMInterfaceRequest{
+					VirtualMachine: *netbox.NewBriefVirtualMachineRequest(name),
+					Name:           inf.IfName,
+					Mtu:            mtu,
+					TaggedVlans:    *new([]int32),
+					Enabled:        netbox.PtrBool(true),
+				}
+
+				mode, err := netbox.NewPatchedWritableInterfaceRequestModeFromValue("tagged")
+				handleError("Constructing 802.1Q mode from string", err)
+
+				if inf.LinkInfo.Kind == "vlan" {
+					request.Mode = *netbox.NewNullablePatchedWritableInterfaceRequestMode(mode)
+					request.TaggedVlans = append(request.TaggedVlans, inf.LinkInfo.Data.(iproute2LinkInfoDataVlan).Id)
+				}
+
+				created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesCreate(ctx).WritableVMInterfaceRequest(request).Execute()
+				handleResponse(created, response, rerr)
+
+				intobjid = created.Id
+
+			}
+		}
+
+		if macobjid > 0 && !macassigned && !dryRun {
+			assignMacAddress(nb, ctx, macobjid, inf.Address, "virtualization.vminterface", int64(intobjid))
+		}
+
+	}
+}
 
 func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	for _, host := range *zh {
