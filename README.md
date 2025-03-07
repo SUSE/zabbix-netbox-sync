@@ -7,8 +7,16 @@ It retrieves data from Zabbix based on a filter configuration and creates or upd
 ## Usage
 
 ```
-$ zabbix-netbox-sync -netbox https://netbox.example.com -zabbix https://zabbix.example.com
+$ zabbix-netbox-sync -config /etc/zabbix-netbox-sync.yaml [ -dry | -wet ]
 ```
+
+Use `-dry` for a run with only informative output and no changes to NetBox, and `-wet` for a run including changes to NetBox.
+
+Optionally adjust the noisiness using `-loglevel <level>`.
+
+## Configuration
+
+Reference the [example configuration](./config.example.yaml).
 
 ### Authentication
 
