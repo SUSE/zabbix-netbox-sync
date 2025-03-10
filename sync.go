@@ -186,6 +186,8 @@ func processIpAddress(hinf *ipRoute2Interface, nbobjtype string, nbinfid int64, 
 				continue
 			}
 
+			Info("Creating IP address object '%s'", cidraddress)
+
 			status, err := netbox.NewPatchedWritableIPAddressRequestStatusFromValue("active")
 			if err != nil {
 				handleError("Validation of new status value", err)
