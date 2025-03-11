@@ -23,6 +23,7 @@ import (
 	"github.com/fabiang/go-zabbix"
 	"gopkg.in/yaml.v3"
 	"strconv"
+	"strings"
 )
 
 type zabbixMetric struct {
@@ -229,19 +230,27 @@ func scanHost(host *zabbixHostData) bool {
 	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
 
+	host.Interfaces = ipRoute2Interfaces{}
+
 	for _, metric := range host.Metrics {
 		Debug("scanHost() processing %s => %s", metric.Key, metric.Value)
 
 		mkey := metric.Key
+
+		if strings.HasPrefix(mkey, "net.if.ip.a.raw_single") {
+			data := parseIpRoute2AddressData(metric.Value)
+			if data != nil {
+				host.Interfaces = append(host.Interfaces, data)
+			}
+
+			continue
+		}
 
 		switch mkey {
 
 		case "agent.hostname":
 			have_agent_hostname = true
 
-		case "net.if.ip.a.raw":
-			iinfs := parseIpRoute2AddressData(metric.Value)
-			host.Interfaces = iinfs
 
 		case "sys.hw.manufacturer":
 			have_sys_hw_manufacturer = true

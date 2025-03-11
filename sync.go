@@ -33,7 +33,7 @@ func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string)
 	search := make(map[string][]string)
 	search["key_"] = []string{
 		"agent.hostname",
-		"net.if.ip.a.raw",
+		"net.if.ip.a.raw[*]",
 		"sys.hw.manufacturer",
 		"sys.hw.metadata",
 		"sys.mount.nfs",
