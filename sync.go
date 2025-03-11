@@ -331,6 +331,98 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 	}
 }
 
+func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
+	name := host.HostName
+	query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name([]string{name}).Limit(2).Execute()
+	handleError("Query of devices", err)
+	found := query.Results
+	Debug("Found devices: %+v", found)
+	foundcount := len(found)
+
+	devicemanufacturer := *netbox.NewBriefManufacturerRequest(host.Manufacturer, "")
+	devicetype := *netbox.NewBriefDeviceTypeRequest(devicemanufacturer, host.Model, "")
+	devicerole := *netbox.NewBriefDeviceRoleRequest("Server", "")
+	deviceserial := host.Serial
+
+	var devobjid int32
+
+	switch foundcount {
+	case 0:
+		if dryRun {
+			Info("Would create device object")
+		} else {
+			Info("Creating device object")
+
+			status, err := netbox.NewDeviceStatusValueFromValue("active")
+			if err != nil {
+				handleError("Validation of new status value", err)
+			}
+
+			request := netbox.WritableDeviceWithConfigContextRequest{
+				Name:       *netbox.NewNullableString(&name),
+				DeviceType: devicetype,
+				Role:       devicerole,
+				Serial:     &deviceserial,
+				Site:       *netbox.NewBriefSiteRequest("Prague - PRG2", "prg2"),
+				Status:     status,
+			}
+
+
+			Debug("Payload: %+v", request)
+			created, response, rerr := nb.DcimAPI.DcimDevicesCreate(ctx).WritableDeviceWithConfigContextRequest(request).Execute()
+			handleResponse(created, response, rerr)
+			devobjid = created.Id
+		}
+
+	case 1:
+		object := found[0]
+
+		request := *netbox.NewPatchedWritableDeviceWithConfigContextRequest()
+
+		devicetype_new := devicetype.GetModel()
+		devicetype_old := object.DeviceType.GetModel()
+		if devicetype_new != devicetype_old {
+			Info("Device type changed: %s => %s", devicetype_old, devicetype_new)
+			request.DeviceType = &devicetype
+		}
+
+		devicerole_new := devicerole.GetName()
+		devicerole_old := object.Role.GetName()
+		if devicerole_new != devicerole_old {
+			Info("Device role changed: %s => %s", devicerole_old, devicerole_new)
+			request.Role = &devicerole
+		}
+
+		deviceserial_old := *object.Serial
+		if deviceserial != deviceserial_old {
+			Info("Device serial changed: %s => %s", deviceserial_old, deviceserial)
+			request.Serial = &deviceserial
+		}
+
+		if request.HasDeviceType() || request.HasRole() || request.HasSerial() {
+			Debug("Payload: %+v", request)
+
+			if dryRun {
+				Info("Would patch object")
+				return
+			}
+
+			created, response, rerr := nb.DcimAPI.DcimDevicesPartialUpdate(ctx, object.Id).PatchedWritableDeviceWithConfigContextRequest(request).Execute()
+			handleResponse(created, response, rerr)
+			devobjid = created.Id
+
+		} else {
+			devobjid = object.Id
+		}
+
+	default:
+		Error("Host %s matches multiple (%d) objects in NetBox.", name, foundcount)
+	}
+
+	Debug("%d", devobjid)
+
+}
+
 func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
 	name := host.HostName
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
@@ -434,18 +526,13 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 
 		Info("Processing host %s", name)
 
-		nbname := []string{name}
-
 		switch host.ObjType {
 
 		case "Virtual":
 			processVirtualMachine(host, nb, ctx, dryRun)
 
 		case "Physical":
-			query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name(nbname).Limit(2).Execute()
-			handleError("Query of devices", err)
-			found := query.Results
-			Debug("Found devices: %v", found)
+			processDevice(host, nb, ctx, dryRun)
 		}
 	}
 }
