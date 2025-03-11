@@ -54,6 +54,9 @@ type zabbixHostData struct {
 	Interfaces ipRoute2Interfaces
 	CPUs       float64
 	Memory     int32
+	Serial     string
+	Manufacturer string
+	Model      string
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -227,7 +230,6 @@ func scanHostMetadata(host *zabbixHostData) {
 
 func scanHost(host *zabbixHostData) bool {
 	have_agent_hostname := false
-	have_sys_hw_manufacturer := false
 	have_sys_hw_metadata := false
 
 	host.Interfaces = ipRoute2Interfaces{}
@@ -251,9 +253,18 @@ func scanHost(host *zabbixHostData) bool {
 		case "agent.hostname":
 			have_agent_hostname = true
 
+		case "sys.hw.chassis_serial", "sys.hw.product_serial":
+			if metric.Value != "" && metric.Value != "0123456789" {
+				if host.Serial == "" {
+					host.Serial = metric.Value
+				} else {
+					Warn("Host %s (%s) serves ambiguous serial numbers.", host.HostID, host.HostName)
+				}
+			}
+			Debug("Got host %s serial %s", host.HostName, metric.Value)
 
 		case "sys.hw.manufacturer":
-			have_sys_hw_manufacturer = true
+			host.Manufacturer = metric.Value
 
 			if metric.Value == "QEMU" {
 				host.ObjType = "Virtual"
@@ -282,6 +293,9 @@ func scanHost(host *zabbixHostData) bool {
 
 			Error("Host %s (%s) serves invalid metadata: %s", host.HostID, host.HostName, err)
 			host.Error = true
+
+		case "sys.hw.model":
+			host.Model = metric.Value
 
 		case "system.cpu.num":
 			cpus, err := strconv.ParseFloat(metric.Value, 64)
@@ -312,7 +326,7 @@ func scanHost(host *zabbixHostData) bool {
 		Error("Host %s (%s) is missing the 'agent.hostname' item.", host.HostID, host.HostName)
 	}
 
-	if !have_sys_hw_manufacturer {
+	if host.Manufacturer == "" {
 		Error("Host %s (%s) is missing the 'sys.hw.manufacturer' item.", host.HostID, host.HostName)
 	}
 
@@ -320,7 +334,12 @@ func scanHost(host *zabbixHostData) bool {
 		Warn("Host %s (%s) is missing the 'sys.hw.metadata' item.", host.HostID, host.HostName)
 	}
 
-	if !have_agent_hostname || !have_sys_hw_manufacturer {
+	if host.ObjType == "Physical" && host.Serial == "" {
+		Warn("Host %s (%s) is missing a serial number.", host.HostID, host.HostName)
+	}
+
+
+	if !have_agent_hostname || host.Manufacturer == "" || ( host.ObjType == "Physical" && host.Serial == "" ) {
 		host.Error = true
 
 		return false
