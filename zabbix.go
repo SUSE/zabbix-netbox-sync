@@ -278,7 +278,7 @@ func scanHost(host *zabbixHostData) bool {
 		case "sys.hw.manufacturer":
 			host.Manufacturer = metric.Value
 
-			if metric.Value == "QEMU" {
+			if metric.Value == "QEMU" || metric.Value == "Bochs" {
 				host.ObjType = "Virtual"
 				// TODO: map virtualization cluster
 			} else {
