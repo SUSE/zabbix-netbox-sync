@@ -181,6 +181,10 @@ func filterItems(zh *zabbixHosts, items []zabbix.Item, keys []string) {
 			continue
 		}
 
+		if strings.HasPrefix(item.Error, "Unknown metric") {
+			continue
+		}
+
 		host.Metrics = append(host.Metrics, zabbixMetric{
 			ID:    item.ItemID,
 			Key:   item.ItemKey,
