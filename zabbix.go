@@ -269,7 +269,7 @@ func scanHost(host *zabbixHostData) bool {
 			if metric.Value != "" && metric.Value != "0123456789" {
 				if host.Serial == "" {
 					host.Serial = metric.Value
-				} else {
+				} else if host.Serial != metric.Value {
 					Warn("Host %s (%s) serves ambiguous serial numbers.", host.HostID, host.HostName)
 				}
 			}
