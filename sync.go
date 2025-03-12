@@ -379,10 +379,12 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 
 		request := *netbox.NewPatchedWritableDeviceWithConfigContextRequest()
 
+		devicemanufacturer_new := devicemanufacturer.GetName()
 		devicetype_new := devicetype.GetModel()
+		devicemanufacturer_old := object.DeviceType.GetManufacturer().Name
 		devicetype_old := object.DeviceType.GetModel()
-		if devicetype_new != devicetype_old {
-			Info("Device type changed: %s => %s", devicetype_old, devicetype_new)
+		if devicemanufacturer_new != devicemanufacturer_old || devicetype_new != devicetype_old {
+			Info("Device type changed: %s %s => %s %s", devicemanufacturer_old, devicetype_old, devicemanufacturer_new, devicetype_new)
 			request.DeviceType = &devicetype
 		}
 
