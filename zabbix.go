@@ -259,8 +259,10 @@ func scanHost(host *zabbixHostData) bool {
 			have_agent_hostname = true
 
 			if host.HostName != metric.Value {
-				Warn("Host %s serves ambiguous names (%s vs %s).", host.HostID, host.HostName, metric.Value)
-				host.HostName = metric.Value
+				Warn("Host %s serves ambiguous names (DNS name '%s' vs Host name '%s').", host.HostID, host.HostName, metric.Value)
+				if metric.Value != "" {
+					host.HostName = metric.Value
+				}
 			}
 
 		case "sys.hw.chassis_serial", "sys.hw.product_serial":
