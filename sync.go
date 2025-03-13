@@ -331,7 +331,7 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 	}
 }
 
-func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
+func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool, config SyncConfig) {
 	name := host.HostName
 	query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name([]string{name}).Limit(2).Execute()
 	handleError("Query of devices", err)
@@ -378,12 +378,16 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 		object := found[0]
 
 		request := *netbox.NewPatchedWritableDeviceWithConfigContextRequest()
+		unidentifiable_manufacturer := false
 
 		devicemanufacturer_new := devicemanufacturer.GetName()
 		devicetype_new := devicetype.GetModel()
 		devicemanufacturer_old := object.DeviceType.GetManufacturer().Name
 		devicetype_old := object.DeviceType.GetModel()
-		if devicemanufacturer_new != devicemanufacturer_old || devicetype_new != devicetype_old {
+		if contains(config.UnidentifiableManufacturers, devicemanufacturer_old) {
+			unidentifiable_manufacturer = true
+		}
+		if !unidentifiable_manufacturer && ( devicemanufacturer_new != devicemanufacturer_old || devicetype_new != devicetype_old ) {
 			Info("Device type changed: %s %s => %s %s", devicemanufacturer_old, devicetype_old, devicemanufacturer_new, devicetype_new)
 			request.DeviceType = &devicetype
 		}
@@ -396,7 +400,7 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 		}
 
 		deviceserial_old := *object.Serial
-		if deviceserial != deviceserial_old {
+		if !unidentifiable_manufacturer && deviceserial != deviceserial_old {
 			Info("Device serial changed: %s => %s", deviceserial_old, deviceserial)
 			request.Serial = &deviceserial
 		}
@@ -513,7 +517,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 
 }
 
-func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string) {
+func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string, config SyncConfig) {
 	for _, host := range *zh {
 		if host.Error {
 			Debug("Skipping processing of host %s.", host.HostName)
@@ -534,7 +538,7 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 			processVirtualMachine(host, nb, ctx, dryRun)
 
 		case "Physical":
-			processDevice(host, nb, ctx, dryRun)
+			processDevice(host, nb, ctx, dryRun, config)
 		}
 	}
 }

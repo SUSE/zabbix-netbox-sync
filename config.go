@@ -24,10 +24,15 @@ import (
 	"os"
 )
 
+type SyncConfig struct {
+	UnidentifiableManufacturers []string `yaml:"unidentifiable_manufacturers"`
+}
+
 type Config struct {
 	NetBox     string   `yaml:"netbox"`
 	Zabbix     string   `yaml:"zabbix"`
 	HostGroups []string `yaml:"hostgroups"`
+	Sync       SyncConfig `yaml:"sync"`
 }
 
 func readConfig(configPath string) (*Config, error) {

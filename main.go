@@ -74,5 +74,5 @@ func main() {
 
 	zh := make(zabbixHosts)
 	prepare(z, &zh, config.HostGroups)
-	sync(&zh, nb, nbctx, runDry, limit)
+	sync(&zh, nb, nbctx, runDry, limit, config.Sync)
 }
