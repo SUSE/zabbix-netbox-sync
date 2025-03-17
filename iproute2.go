@@ -90,25 +90,27 @@ func parseIpRoute2AddressData(raw string) *ipRoute2Interface {
 	err := json.Unmarshal([]byte(raw), &inf)
 	handleError("Parsing interface JSON", err)
 
-	switch inf.LinkInfo.Kind {
-	case "bond":
-		inf.LinkInfo.Data = iproute2LinkInfoDataBond{}
-	case "bridge":
-		inf.LinkInfo.Data = iproute2LinkInfoDataBridge{}
-	case "vlan":
-		inf.LinkInfo.Data = iproute2LinkInfoDataVlan{}
-	case "":
-		return nil
-	default:
-		Error("Unhandled kind %s", inf.LinkInfo.Kind)
-		return nil
+	if inf.LinkInfo.DataRaw != nil {
+		switch inf.LinkInfo.Kind {
+		case "bond":
+			inf.LinkInfo.Data = iproute2LinkInfoDataBond{}
+		case "bridge":
+			inf.LinkInfo.Data = iproute2LinkInfoDataBridge{}
+		case "vlan":
+			inf.LinkInfo.Data = iproute2LinkInfoDataVlan{}
+		case "":
+			return nil
+		default:
+			Error("Unhandled kind %s", inf.LinkInfo.Kind)
+			return nil
+		}
+
+		err = json.Unmarshal(inf.LinkInfo.DataRaw, &inf.LinkInfo.Data)
+		handleError("Parsing link data JSON", err)
+
+		// raw data is no longer needed, reset field to avoid huge debug output
+		inf.LinkInfo.DataRaw = nil
 	}
-
-	err = json.Unmarshal(inf.LinkInfo.DataRaw, &inf.LinkInfo.Data)
-	handleError("Parsing link data JSON", err)
-
-	// raw data is no longer needed, reset field to avoid huge debug output
-	inf.LinkInfo.DataRaw = nil
 
 	Debug("Got data %+v", inf)
 
