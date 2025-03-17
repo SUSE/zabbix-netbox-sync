@@ -244,7 +244,7 @@ func scanHost(host *zabbixHostData) bool {
 
 		mkey := metric.Key
 
-		if strings.HasPrefix(mkey, "net.if.ip.a.raw_single") {
+		if strings.HasPrefix(mkey, "net.if.ip.a.raw") {
 			data := parseIpRoute2AddressData(metric.Value)
 			if data != nil {
 				host.Interfaces = append(host.Interfaces, data)
