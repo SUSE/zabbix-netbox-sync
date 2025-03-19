@@ -27,8 +27,8 @@ import (
 )
 
 type site struct {
-	Name string
-	Slug string
+	Name   string
+	Slug   string
 	Domain string
 }
 
@@ -76,8 +76,8 @@ func getSites(nb *netbox.APIClient, ctx context.Context) []site {
 		}
 
 		sites = append(sites, site{
-			Name: object.Name,
-			Slug: object.Slug,
+			Name:   object.Name,
+			Slug:   object.Slug,
 			Domain: domain,
 		})
 	}

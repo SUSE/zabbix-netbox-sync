@@ -44,19 +44,19 @@ type linuxInterfaces map[string]*linuxInterface
 type zabbixHostMetaData map[string]string
 
 type zabbixHostData struct {
-	HostID     string
-	HostName   string
-	Metrics    []zabbixMetric
-	Error      bool
-	ObjType    string
-	Meta       zabbixHostMetaData
-	Label      string
-	Interfaces ipRoute2Interfaces
-	CPUs       float64
-	Memory     int32
-	Serial     string
+	HostID       string
+	HostName     string
+	Metrics      []zabbixMetric
+	Error        bool
+	ObjType      string
+	Meta         zabbixHostMetaData
+	Label        string
+	Interfaces   ipRoute2Interfaces
+	CPUs         float64
+	Memory       int32
+	Serial       string
 	Manufacturer string
-	Model      string
+	Model        string
 }
 
 type zabbixHosts map[string]*zabbixHostData
@@ -350,8 +350,7 @@ func scanHost(host *zabbixHostData) bool {
 		Warn("Host %s (%s) is missing a serial number.", host.HostID, host.HostName)
 	}
 
-
-	if !have_agent_hostname || host.Manufacturer == "" || ( host.ObjType == "Physical" && host.Serial == "" ) {
+	if !have_agent_hostname || host.Manufacturer == "" || (host.ObjType == "Physical" && host.Serial == "") {
 		host.Error = true
 
 		return false

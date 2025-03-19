@@ -404,7 +404,6 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 				Status:     status,
 			}
 
-
 			Debug("Payload: %+v", request)
 			created, response, rerr := nb.DcimAPI.DcimDevicesCreate(ctx).WritableDeviceWithConfigContextRequest(request).Execute()
 			handleResponse(created, response, rerr)
@@ -432,7 +431,7 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 		if contains(config.UnidentifiableManufacturers, devicemanufacturer_old) {
 			unidentifiable_manufacturer = true
 		}
-		if !unidentifiable_manufacturer && ( devicemanufacturer_new != devicemanufacturer_old || devicetype_new != devicetype_old ) {
+		if !unidentifiable_manufacturer && (devicemanufacturer_new != devicemanufacturer_old || devicetype_new != devicetype_old) {
 			Info("Device type changed: %s %s => %s %s", devicemanufacturer_old, devicetype_old, devicemanufacturer_new, devicetype_new)
 			request.DeviceType = &devicetype
 		}

@@ -29,9 +29,9 @@ type SyncConfig struct {
 }
 
 type Config struct {
-	NetBox     string   `yaml:"netbox"`
-	Zabbix     string   `yaml:"zabbix"`
-	HostGroups []string `yaml:"hostgroups"`
+	NetBox     string     `yaml:"netbox"`
+	Zabbix     string     `yaml:"zabbix"`
+	HostGroups []string   `yaml:"hostgroups"`
 	Sync       SyncConfig `yaml:"sync"`
 }
 
