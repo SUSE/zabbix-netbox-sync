@@ -287,9 +287,17 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 		}
 
 		macobjid, macassigned := processMacAddress(nb, ctx, inf.Address, dryRun)
+		nbmac := *netbox.NewNullableBriefMACAddressRequest(netbox.NewBriefMACAddressRequest(strings.ToUpper(inf.Address)))
 
 		if found {
 			request := *netbox.NewPatchedWritableVMInterfaceRequest()
+
+			mac_new := nbmac.Get().GetMacAddress()
+			mac_old := nbinf.PrimaryMacAddress.Get().GetMacAddress()
+			if mac_new != mac_old {
+				Info("Primary MAC address changed: %s => %s", mac_old, mac_new)
+				request.PrimaryMacAddress = nbmac
+			}
 
 			mtu_new := *mtu.Get()
 			mtu_old := *nbinf.Mtu.Get()
@@ -300,7 +308,7 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 
 			// TODO: compare/update tagged VLANs
 
-			if request.HasMtu() {
+			if request.HasPrimaryMacAddress() || request.HasMtu() {
 				Debug("Payload: %+v", request)
 
 				if dryRun {
@@ -342,6 +350,16 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 
 		if macobjid > 0 && !macassigned && !dryRun {
 			assignMacAddress(nb, ctx, macobjid, inf.Address, "virtualization.vminterface", int64(intobjid))
+		}
+
+		// cannot set PrimaryMacAddress during creation as assignment needs to happen first
+		if !found && !dryRun {
+			request := netbox.PatchedWritableVMInterfaceRequest{
+				PrimaryMacAddress: nbmac,
+			}
+
+			created, response, rerr := nb.VirtualizationAPI.VirtualizationInterfacesPartialUpdate(ctx, intobjid).PatchedWritableVMInterfaceRequest(request).Execute()
+			handleResponse(created, response, rerr)
 		}
 
 		processIpAddress(inf, "virtualization.vminterface", int64(intobjid), nb, ctx, dnsname, dryRun)
