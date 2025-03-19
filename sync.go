@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/fabiang/go-zabbix"
 	"github.com/netbox-community/go-netbox/v4"
+	"strings"
 )
 
 func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string) {
@@ -49,6 +50,23 @@ func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string)
 
 	filterItems(zh, getItems(z, hostIds, search), search["key_"])
 	scanHosts(zh)
+}
+
+func processSite(name string, sites []site) *site {
+	name_parts := strings.Split(name, ".")
+	domain_parts := name_parts[len(name_parts)-3:]
+	if strings.Contains(domain_parts[0], "-") {
+		domain_parts[0] = strings.Split(domain_parts[0], "-")[1]
+	}
+	domain := strings.Join(domain_parts, ".")
+
+	for _, s := range sites {
+		if s.Domain == domain {
+			return &s
+		}
+	}
+
+	return nil
 }
 
 func processMacAddress(nb *netbox.APIClient, ctx context.Context, address string, dryRun bool) (int32, bool) {
@@ -331,7 +349,7 @@ func processVirtualMachineInterface(host *zabbixHostData, nb *netbox.APIClient, 
 	}
 }
 
-func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool, config SyncConfig) {
+func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool, config SyncConfig, sitemeta site) {
 	name := host.HostName
 	query, _, err := nb.DcimAPI.DcimDevicesList(ctx).Name([]string{name}).Limit(2).Execute()
 	handleError("Query of devices", err)
@@ -343,6 +361,7 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 	devicetype := *netbox.NewBriefDeviceTypeRequest(devicemanufacturer, host.Model, "")
 	devicerole := *netbox.NewBriefDeviceRoleRequest("Server", "")
 	deviceserial := host.Serial
+	devicesite := *netbox.NewBriefSiteRequest(sitemeta.Name, sitemeta.Slug)
 
 	var devobjid int32
 
@@ -363,7 +382,7 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 				DeviceType: devicetype,
 				Role:       devicerole,
 				Serial:     &deviceserial,
-				Site:       *netbox.NewBriefSiteRequest("Prague - PRG2", "prg2"),
+				Site:       devicesite,
 				Status:     status,
 			}
 
@@ -378,6 +397,14 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 		object := found[0]
 
 		request := *netbox.NewPatchedWritableDeviceWithConfigContextRequest()
+
+		site_new := devicesite
+		site_old := object.Site
+		if site_new.GetSlug() != site_old.GetSlug() {
+			Info("Site changed by domain: %s (%s) => %s (%s)", site_old.Name, site_old.Slug, site_new.Name, site_new.Slug)
+			request.Site = &devicesite
+		}
+
 		unidentifiable_manufacturer := false
 
 		devicemanufacturer_new := devicemanufacturer.GetName()
@@ -405,7 +432,7 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 			request.Serial = &deviceserial
 		}
 
-		if request.HasDeviceType() || request.HasRole() || request.HasSerial() {
+		if request.HasSite() || request.HasDeviceType() || request.HasRole() || request.HasSerial() {
 			Debug("Payload: %+v", request)
 
 			if dryRun {
@@ -429,8 +456,9 @@ func processDevice(host *zabbixHostData, nb *netbox.APIClient, ctx context.Conte
 
 }
 
-func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool) {
+func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx context.Context, dryRun bool, sitemeta site) {
 	name := host.HostName
+
 	query, _, err := nb.VirtualizationAPI.VirtualizationVirtualMachinesList(ctx).Name([]string{name}).Limit(2).Execute()
 	handleError("Query of virtual machines", err)
 	found := query.Results
@@ -439,6 +467,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 
 	memory := *netbox.NewNullableInt32(&host.Memory)
 	vcpus := *netbox.NewNullableFloat64(&host.CPUs)
+	nbsite := *netbox.NewNullableBriefSiteRequest(netbox.NewBriefSiteRequest(sitemeta.Name, sitemeta.Slug))
 
 	var vmobjid int32
 
@@ -456,7 +485,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 
 			request := netbox.WritableVirtualMachineWithConfigContextRequest{
 				Name:    name,
-				Site:    *netbox.NewNullableBriefSiteRequest(netbox.NewBriefSiteRequest("Prague - PRG2", "prg2")),
+				Site:    nbsite,
 				Cluster: *netbox.NewNullableBriefClusterRequest(netbox.NewBriefClusterRequest("Unmapped")),
 				Status:  status,
 				Memory:  memory,
@@ -472,6 +501,13 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 		object := found[0]
 
 		request := *netbox.NewPatchedWritableVirtualMachineWithConfigContextRequest()
+
+		site_new := *nbsite.Get()
+		site_old := *object.Site.Get()
+		if site_new.Slug != site_old.Slug {
+			Info("Site changed by domain: %s (%s) => %s (%s)", site_old.Name, site_old.Slug, site_new.Name, site_new.Slug)
+			request.Site = nbsite
+		}
 
 		memory_new := *memory.Get()
 		var memory_old int32
@@ -493,7 +529,7 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 			request.Vcpus = vcpus
 		}
 
-		if request.HasMemory() || request.HasVcpus() {
+		if request.HasSite() || request.HasMemory() || request.HasVcpus() {
 			Debug("Payload: %+v", request)
 
 			if dryRun {
@@ -518,6 +554,8 @@ func processVirtualMachine(host *zabbixHostData, nb *netbox.APIClient, ctx conte
 }
 
 func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun bool, limit string, config SyncConfig) {
+	sites := getSites(nb, ctx)
+
 	for _, host := range *zh {
 		if host.Error {
 			Debug("Skipping processing of host %s.", host.HostName)
@@ -525,6 +563,12 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 		}
 
 		name := host.HostName
+		sitemeta := processSite(name, sites)
+
+		if sitemeta == nil {
+			Debug("Skipping processing of host %s due to unknown site.", host.HostName)
+			continue
+		}
 
 		if limit != "" && name != limit {
 			continue
@@ -535,10 +579,10 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 		switch host.ObjType {
 
 		case "Virtual":
-			processVirtualMachine(host, nb, ctx, dryRun)
+			processVirtualMachine(host, nb, ctx, dryRun, *sitemeta)
 
 		case "Physical":
-			processDevice(host, nb, ctx, dryRun, config)
+			processDevice(host, nb, ctx, dryRun, config, *sitemeta)
 		}
 	}
 }

@@ -26,6 +26,12 @@ import (
 	"os"
 )
 
+type site struct {
+	Name string
+	Slug string
+	Domain string
+}
+
 func nbConnect(url string, token string) (*netbox.APIClient, context.Context) {
 	return netbox.NewAPIClientFor(url, token), context.Background()
 }
@@ -46,6 +52,37 @@ func getDevices(nb *netbox.APIClient, ctx context.Context) *netbox.PaginatedDevi
 	Debug("getDevices() returns %v", result.Results)
 
 	return result
+}
+
+func getSites(nb *netbox.APIClient, ctx context.Context) []site {
+	result, _, err := nb.DcimAPI.DcimSitesList(ctx).Execute()
+	handleError("Querying sites", err)
+
+	Debug("getSites() returns %v", result.Results)
+
+	var sites []site
+
+	for _, object := range result.Results {
+		Debug("Processing site %+v", object)
+
+		var domain string
+		var has_domain bool
+		if value, ok := object.CustomFields["domain"]; ok {
+			domain, has_domain = value.(string)
+		}
+
+		if !has_domain {
+			continue
+		}
+
+		sites = append(sites, site{
+			Name: object.Name,
+			Slug: object.Slug,
+			Domain: domain,
+		})
+	}
+
+	return sites
 }
 
 func handleResponse(created interface{}, response *http.Response, err error) {
