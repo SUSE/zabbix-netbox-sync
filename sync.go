@@ -26,7 +26,7 @@ import (
 	"strings"
 )
 
-func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string) {
+func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string, limit string) {
 	workHosts := getHosts(z, filterHostGroupIds(getHostGroups(z), whitelistedHostgroups))
 	hostIds := filterHostIds(workHosts)
 	filterHostInterfaces(zh, getHostInterfaces(z, hostIds))
@@ -49,7 +49,7 @@ func prepare(z *zabbix.Session, zh *zabbixHosts, whitelistedHostgroups []string)
 	}
 
 	filterItems(zh, getItems(z, hostIds, search), search["key_"])
-	scanHosts(zh)
+	scanHosts(zh, limit)
 }
 
 func processSite(name string, sites []site) *site {
@@ -574,20 +574,21 @@ func sync(zh *zabbixHosts, nb *netbox.APIClient, ctx context.Context, dryRun boo
 	sites := getSites(nb, ctx)
 
 	for _, host := range *zh {
+		name := host.HostName
+
+		if limit != "" && name != limit {
+			continue
+		}
+
 		if host.Error {
 			Debug("Skipping processing of host %s.", host.HostName)
 			continue
 		}
 
-		name := host.HostName
 		sitemeta := processSite(name, sites)
 
 		if sitemeta == nil {
 			Debug("Skipping processing of host %s due to unknown site.", host.HostName)
-			continue
-		}
-
-		if limit != "" && name != limit {
 			continue
 		}
 

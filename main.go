@@ -73,6 +73,6 @@ func main() {
 	nb, nbctx := nbConnect(config.NetBox, netboxToken)
 
 	zh := make(zabbixHosts)
-	prepare(z, &zh, config.HostGroups)
+	prepare(z, &zh, config.HostGroups, limit)
 	sync(&zh, nb, nbctx, runDry, limit, config.Sync)
 }
